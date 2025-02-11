@@ -44,9 +44,13 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     game = games[game_id]
     await websocket.accept()
     game.websocket_connections[player_id] = websocket
+    print(f"WebSocket connected: {player_id}")  # Debugging
+
     try:
         while True:
             data = await websocket.receive_json()
+            print(f"Received WebSocket message from {player_id}: {data}")  # Debugging
+
             await game.broadcast(data)
     except WebSocketDisconnect:
         del game.websocket_connections[player_id]
