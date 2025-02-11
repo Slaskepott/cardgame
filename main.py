@@ -19,6 +19,13 @@ class Game:
         for ws in self.websocket_connections.values():
             await ws.send_json(message)
 
+@app.get("/game/{game_id}/players")
+def get_players(game_id: str):
+    if game_id not in games:
+        return {"error": "Game not found"}
+    
+    return {"players": games[game_id].players}
+
 @app.post("/game/create")
 def create_game():
     game_id = str(uuid4())
