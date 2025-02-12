@@ -227,7 +227,7 @@ async def discard(game_id: str, request: dict):
         return {"error": "Not your turn"}
     if not selected_cards:
         return {"error": "No cards selected"}
-    hand = game[player_id]
+    hand = game.player_hands[player_id]
     for card in selected_cards:
         hand.remove(card)
     
