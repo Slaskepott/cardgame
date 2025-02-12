@@ -216,6 +216,39 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         print(f"WebSocket disconnected: {player_id}")
         del game.websocket_connections[player_id]
 
+@app.post("/game/{game_id}/discard")
+async def discard(game_id: str, request: dict):
+    if game_id not in games:
+        return {"error": "Game not found"}
+    game = games[game_id]
+    player_id = request.get("player_id")
+    selected_cards = request.get("cards", [])
+    if player_id != game.players[game.turn_index]:
+        return {"error": "Not your turn"}
+    if not selected_cards:
+        return {"error": "No cards selected"}
+    hand = game[player_id]
+    for card in selected_cards:
+        hand.remove(card)
+    
+    # Draw new cards to maintain hand size (if possible)
+    while len(game.player_hands[player_id]) < 8 and game.deck:
+        game.deal_card(player_id)
+
+    # Broadcast updated hand to player
+    hand_message = {
+        "type": "hand_updated",
+        "player": player_id,
+        "cards": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
+    }
+    await game.broadcast(hand_message)
+
+    return {
+        "message": "Cards discarded and new ones drawn",
+        "discarded": [{"rank": c.rank, "suit": c.suit} for c in discarded_cards],
+        "new_hand": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
+    }
+    
 
 @app.post("/game/{game_id}/play_hand")
 async def play_hand(game_id: str, request: dict):
