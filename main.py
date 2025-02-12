@@ -125,12 +125,12 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     game.websocket_connections[player_id] = websocket
     print(f"WebSocket connected: {player_id}")
 
-    # ✅ Deal hand *only if* player has no cards yet
+    # ✅ Deal hand *only if* player has no cards yet    
     if not game.player_hands[player_id]:
         dealt_cards = []
         for _ in range(5):
-            if game.deck:  # ✅ Ensure deck is not empty
-                card = game.deck.pop(0)  # Draw from the deck
+            if game.deck:
+                card = game.deck.pop(random.randint(0, len(game.deck) - 1))
                 dealt_cards.append(card)
 
         game.player_hands[player_id] = dealt_cards
