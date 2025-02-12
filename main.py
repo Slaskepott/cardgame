@@ -98,8 +98,13 @@ async def play_card(game_id: str, player_id: str, card: str):
             return {"error": "Not your turn"}
 
         game.state[player_id] = card
-        await game.broadcast({"player": player_id, "card": card})
+
+        # ✅ Explicitly broadcast the update to all players
+        message = {"type": "play", "player": player_id, "card": card}
+        await game.broadcast(message)
+
         return {"message": "Card played", "card": card}
+
 
 @app.post("/game/{game_id}/end_turn")
 async def end_turn(game_id: str, player_id: str):
