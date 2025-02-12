@@ -240,6 +240,10 @@ async def discard(game_id: str, request: dict):
     # Convert selected_cards to a set of (rank, suit) tuples for comparison
     selected_card_tuples = {(card["rank"], card["suit"]) for card in selected_cards}
 
+    print(f"Selected: {selected_card_tuples}")
+    print(f"Player {player_id} Hand Before: {[{'rank': c.rank, 'suit': c.suit} for c in game.player_hands[player_id]]}")
+
+
     # Remove selected cards from player's hand
     new_hand = [card for card in game.player_hands[player_id] if (card.rank, card.suit) not in selected_card_tuples]
     discarded_cards = [card for card in game.player_hands[player_id] if (card.rank, card.suit) in selected_card_tuples]
@@ -295,6 +299,7 @@ async def play_hand(game_id: str, request: dict):
 
     # Move to the next turn
     game.turn_index = (game.turn_index + 1) % len(game.players)
+    print(f"Its now player {game.turn_index}'s turn")
 
     # Broadcast game state update
     await game.broadcast({
