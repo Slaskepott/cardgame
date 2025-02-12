@@ -64,8 +64,9 @@ async def join_game(game_id: str, player_id: str):
     game.players.append(player_id)
     game.health[player_id] = 100  # ✅ Set initial health to 100
 
-    # Notify all players of health updates
-    await game.broadcast({"type": "health_update", "player": player_id, "health": 100})
+    # ✅ Broadcast full health state to all players
+    health_status = {"type": "health_update", "players_health": game.health}
+    await game.broadcast(health_status)
 
     return {"message": "Joined game", "players": game.players, "health": game.health}
 
