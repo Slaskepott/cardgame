@@ -206,7 +206,9 @@ def calculate_damage(cards):
 def get_players(game_id: str):
     if game_id not in games:
         return {"error": "Game not found"}
-    return {"players": games[game_id].players.keys()}
+    
+    return {"players": list(games[game_id].players.keys())}
+
 
 @app.post("/game/create/{game_id}")
 def create_game(game_id: str):
