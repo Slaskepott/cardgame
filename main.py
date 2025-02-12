@@ -41,6 +41,7 @@ class Game:
         self.lock = asyncio.Lock()
         self.deck = generate_deck()  # ✅ Full deck of 52 cards
         self.player_hands: Dict[str, List[Card]] = {}
+        self.remaining_discards: Dict[str, int] = {}
 
     async def broadcast(self, message: dict):
         disconnected_players = []
@@ -164,6 +165,7 @@ async def join_game(game_id: str, player_id: str):
     game.players.append(player_id)
     game.health[player_id] = 100  # Initialize health
     game.player_hands[player_id] = []  # Empty hand (will be dealt after WebSocket connects)
+    game.remaining_discards[player_id] = 1
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
 
@@ -231,6 +233,9 @@ async def discard(game_id: str, request: dict):
         return {"error": "No cards selected"}
     if player_id not in game.player_hands:
         return {"error": "Player has no hand"}
+    if game.remaining_discards[player_id] < 1:
+        return {"error": "No discards remaining"}
+    game.remaining_discards[player_id] -= 1
 
     # Convert selected_cards to a set of (rank, suit) tuples for comparison
     selected_card_tuples = {(card["rank"], card["suit"]) for card in selected_cards}
@@ -278,6 +283,8 @@ async def play_hand(game_id: str, request: dict):
 
     if not selected_cards:
         return {"error": "No cards selected"}
+
+    game.remaining_discards[player_id] += 1
 
     # Calculate damage based on poker rules
     damage, hand_type = calculate_damage(selected_cards)
