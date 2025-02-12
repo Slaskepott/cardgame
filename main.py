@@ -60,9 +60,7 @@ class Game:
         if player_id not in self.player_hands:
             self.player_hands[player_id] = []
         if self.deck:
-            print(f"Before dealing: {len(self.deck)}")
             card = self.deck.pop(random.randint(0, len(self.deck) - 1))
-            print(f"After dealing: {len(self.deck)}")
             self.player_hands[player_id].append(card)
             return card
         return None
@@ -257,9 +255,7 @@ async def discard(game_id: str, request: dict):
 
     # Draw new cards to maintain hand size (if possible)
     while len(game.player_hands[player_id]) < 8 and game.deck:
-        new_card = game.deal_card(player_id)
-        if new_card:
-            game.player_hands[player_id].append(new_card)
+        game.deal_card(player_id)
 
     # Broadcast updated hand to player
     hand_message = {
