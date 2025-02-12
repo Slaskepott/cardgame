@@ -42,6 +42,18 @@ class Game:
         self.deck = generate_deck()  # ✅ Full deck of 52 cards
         self.player_hands: Dict[str, List[Card]] = {}
 
+    async def broadcast(self, message: dict):
+        disconnected_players = []
+        for player, ws in self.websocket_connections.items():
+            try:
+                await ws.send_json(message)
+            except Exception:
+                disconnected_players.append(player)
+
+        # Remove disconnected players
+        for player in disconnected_players:
+            del self.websocket_connections[player]
+    
     def deal_card(self, player_id):
         """Draws a random card for a player."""
         if player_id not in self.player_hands:
@@ -64,6 +76,7 @@ def calculate_damage(hand: List[Card]):
 
     base_damage = sum(card.base_damage for card in hand)
     return base_damage * multiplier  # Apply multiplier
+
 
 @app.get("/game/{game_id}/players")
 def get_players(game_id: str):
