@@ -65,18 +65,60 @@ class Game:
         return None
 
 def calculate_damage(cards):
-    """Evaluates a hand and returns damage based on poker multipliers."""
+    """Evaluates a hand and returns damage and hand type based on poker multipliers."""
+    multipliers = {
+        "high card": 1,
+        "pair": 2,
+        "two pair": 3,
+        "three of a kind": 4,
+        "straight": 5,
+        "flush": 6,
+        "full house": 7,
+        "four of a kind": 10,
+        "straight flush": 15,
+        "royal flush": 20
+    }
+
     rank_counts = {}
+    suit_counts = {}
+    ranks = []
+    
     for card in cards:
-        rank_counts[card["rank"]] = rank_counts.get(card["rank"], 0) + 1
+        rank = card["rank"]
+        suit = card["suit"]
+        rank_counts[rank] = rank_counts.get(rank, 0) + 1
+        suit_counts[suit] = suit_counts.get(suit, 0) + 1
+        ranks.append(rank)
 
-    max_match = max(rank_counts.values(), default=1)
-    multiplier = max_match  # Pair = 2x, Three of a kind = 3x, etc.
+    rank_frequencies = sorted(rank_counts.values(), reverse=True)
+    is_flush = max(suit_counts.values()) == len(cards)
+    sorted_ranks = sorted(ranks)
+    is_straight = sorted_ranks == list(range(min(sorted_ranks), min(sorted_ranks) + len(cards)))
 
-    base_damage = 10 * len(cards)  # Base damage per card
-    return base_damage * multiplier  # Apply multiplier
+    if is_straight and is_flush:
+        hand_type = "royal flush" if max(ranks) == 14 else "straight flush"
+    elif 4 in rank_frequencies:
+        hand_type = "four of a kind"
+    elif 3 in rank_frequencies and 2 in rank_frequencies:
+        hand_type = "full house"
+    elif is_flush:
+        hand_type = "flush"
+    elif is_straight:
+        hand_type = "straight"
+    elif 3 in rank_frequencies:
+        hand_type = "three of a kind"
+    elif rank_frequencies.count(2) == 2:
+        hand_type = "two pair"
+    elif 2 in rank_frequencies:
+        hand_type = "pair"
+    else:
+        hand_type = "high card"
 
+    multiplier = multipliers[hand_type]
+    base_damage = 2 * len(cards)  # Base damage per card
+    total_damage = base_damage * multiplier
 
+    return total_damage, hand_type
 
 @app.get("/game/{game_id}/players")
 def get_players(game_id: str):
@@ -104,7 +146,7 @@ async def join_game(game_id: str, player_id: str):
 
     # ✅ Register player in the game
     game.players.append(player_id)
-    game.health[player_id] = 100  # Initialize health
+    game.health[player_id] = 1000  # Initialize health
     game.player_hands[player_id] = []  # Empty hand (will be dealt after WebSocket connects)
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
@@ -128,7 +170,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     # ✅ Deal hand *only if* player has no cards yet    
     if not game.player_hands[player_id]:
         dealt_cards = []
-        for _ in range(5):
+        for _ in range(8):
             if game.deck:
                 card = game.deck.pop(random.randint(0, len(game.deck) - 1))
                 dealt_cards.append(card)
@@ -175,7 +217,7 @@ async def play_hand(game_id: str, request: dict):
         return {"error": "No cards selected"}
 
     # Calculate damage based on poker rules
-    damage = calculate_damage(selected_cards)
+    damage, hand_type = calculate_damage(selected_cards)
 
     # Apply damage to opponent
     opponent_id = game.players[(game.turn_index + 1) % len(game.players)]
@@ -191,7 +233,8 @@ async def play_hand(game_id: str, request: dict):
         "cards": selected_cards,
         "damage": damage,
         "health_update": game.health,
-        "next_player": game.players[game.turn_index]
+        "next_player": game.players[game.turn_index],
+        "hand_type": hand_type
     })
 
     return {"message": f"{player_id} played a hand", "damage": damage}
