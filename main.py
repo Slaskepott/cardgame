@@ -64,18 +64,18 @@ class Game:
             return card
         return None
 
-def calculate_damage(hand: List[Card]):
+def calculate_damage(cards):
     """Evaluates a hand and returns damage based on poker multipliers."""
     rank_counts = {}
-    for card in hand:
-        rank_counts[card.rank] = rank_counts.get(card.rank, 0) + 1
+    for card in cards:
+        rank_counts[card["rank"]] = rank_counts.get(card["rank"], 0) + 1
 
-    # Find the highest match (pair, three of a kind, etc.)
     max_match = max(rank_counts.values(), default=1)
     multiplier = max_match  # Pair = 2x, Three of a kind = 3x, etc.
 
-    base_damage = sum(card.base_damage for card in hand)
+    base_damage = 10 * len(cards)  # Base damage per card
     return base_damage * multiplier  # Apply multiplier
+
 
 
 @app.get("/game/{game_id}/players")
@@ -159,36 +159,43 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         del game.websocket_connections[player_id]
 
 
-@app.post("/game/{game_id}/play_card")
-async def play_card(game_id: str, player_id: str):
+@app.post("/game/{game_id}/play_hand")
+async def play_hand(game_id: str, request: dict):
     if game_id not in games:
         return {"error": "Game not found"}
 
     game = games[game_id]
-    
+    player_id = request.get("player_id")
+    selected_cards = request.get("cards", [])
+
     if player_id != game.players[game.turn_index]:
         return {"error": "Not your turn"}
 
-    card = game.deal_card(player_id)
-    if not card:
-        return {"error": "No more cards in deck"}
+    if not selected_cards:
+        return {"error": "No cards selected"}
 
-    damage = calculate_damage(game.player_hands[player_id])
+    # Calculate damage based on poker rules
+    damage = calculate_damage(selected_cards)
 
     # Apply damage to opponent
     opponent_id = game.players[(game.turn_index + 1) % len(game.players)]
     game.health[opponent_id] = max(0, game.health[opponent_id] - damage)
 
-    # ✅ Broadcast update
+    # Move to the next turn
+    game.turn_index = (game.turn_index + 1) % len(game.players)
+
+    # Broadcast game state update
     await game.broadcast({
-        "type": "card_played",
+        "type": "hand_played",
         "player": player_id,
-        "card": str(card),
+        "cards": selected_cards,
         "damage": damage,
-        "health_update": game.health
+        "health_update": game.health,
+        "next_player": game.players[game.turn_index]
     })
 
-    return {"message": f"{player_id} played {card}. Dealt {damage} damage."}
+    return {"message": f"{player_id} played a hand", "damage": damage}
+
 
 
 @app.post("/game/{game_id}/end_turn")
