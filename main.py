@@ -65,6 +65,35 @@ class Game:
             return card
         return None
 
+    def remove_selected_cards(self, player_id: str, selected_cards: List[dict]) -> dict:
+        """Removes selected cards from player's hand and returns discarded cards."""
+        if player_id not in self.player_hands:
+            return {"error": "Player has no hand"}
+
+        # Convert selected_cards to a set of (rank, suit) tuples for comparison
+        selected_card_tuples = {(card["rank"], card["suit"]) for card in selected_cards}
+
+        print(f"Selected: {selected_card_tuples}")
+        print(f"Player {player_id} Hand Before: {[{'rank': c.rank, 'suit': c.suit} for c in self.player_hands[player_id]]}")
+
+        # Remove selected cards from player's hand
+        new_hand = [card for card in self.player_hands[player_id] if (card.rank, card.suit) not in selected_card_tuples]
+        discarded_cards = [card for card in self.player_hands[player_id] if (card.rank, card.suit) in selected_card_tuples]
+
+        if len(new_hand) == len(self.player_hands[player_id]):  # No valid cards were removed
+            return {"error": "Selected cards not found in hand"}
+
+        self.player_hands[player_id] = new_hand
+
+        # Draw new cards to maintain hand size (if possible)
+        while len(self.player_hands[player_id]) < 8 and self.deck:
+            self.deal_card(player_id)
+
+        return {
+            "discarded": [{"rank": c.rank, "suit": c.suit} for c in discarded_cards],
+            "new_hand": [{"rank": c.rank, "suit": c.suit} for c in self.player_hands[player_id]]
+        }
+
 def calculate_damage(cards):
     """Evaluates a hand and returns damage and hand type based on poker multipliers."""
     multipliers = {
@@ -233,46 +262,32 @@ async def discard(game_id: str, request: dict):
         return {"error": "Not your turn"}
     if not selected_cards:
         return {"error": "No cards selected"}
-    if player_id not in game.player_hands:
-        return {"error": "Player has no hand"}
     if game.remaining_discards[player_id] < 1:
         return {"error": "No discards remaining"}
+
     game.remaining_discards[player_id] -= 1
 
-    # Convert selected_cards to a set of (rank, suit) tuples for comparison
-    selected_card_tuples = {(card["rank"], card["suit"]) for card in selected_cards}
-
-    print(f"Selected: {selected_card_tuples}")
-    print(f"Player {player_id} Hand Before: {[{'rank': c.rank, 'suit': c.suit} for c in game.player_hands[player_id]]}")
-
-
-    # Remove selected cards from player's hand
-    new_hand = [card for card in game.player_hands[player_id] if (card.rank, card.suit) not in selected_card_tuples]
-    discarded_cards = [card for card in game.player_hands[player_id] if (card.rank, card.suit) in selected_card_tuples]
-
-    if len(new_hand) == len(game.player_hands[player_id]):  # No valid cards were removed
-        return {"error": "Selected cards not found in hand"}
-
-    game.player_hands[player_id] = new_hand
-
-    # Draw new cards to maintain hand size (if possible)
-    while len(game.player_hands[player_id]) < 8 and game.deck:
-        game.deal_card(player_id)
+    # Use the extracted card removal function
+    result = game.remove_selected_cards(player_id, selected_cards)
+    if "error" in result:
+        return result
 
     # Broadcast updated hand to player
     hand_message = {
         "type": "hand_updated",
         "player": player_id,
-        "cards": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
+        "cards": result["new_hand"]
     }
     await game.broadcast(hand_message)
 
     return {
         "message": "Cards discarded and new ones drawn",
-        "discarded": [{"rank": c.rank, "suit": c.suit} for c in discarded_cards],
-        "new_hand": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]],
+        "discarded": result["discarded"],
+        "new_hand": result["new_hand"],
         "remaining_discards": game.remaining_discards[player_id]
     }
+}
+
 
 @app.post("/game/{game_id}/play_hand")
 async def play_hand(game_id: str, request: dict):
@@ -285,14 +300,16 @@ async def play_hand(game_id: str, request: dict):
 
     if player_id != game.players[game.turn_index]:
         return {"error": "Not your turn"}
-
     if not selected_cards:
         return {"error": "No cards selected"}
 
-    game.remaining_discards[player_id] += 1
-
     # Calculate damage based on poker rules
     damage, hand_type = calculate_damage(selected_cards)
+
+    # Remove selected cards using the shared function
+    result = game.remove_selected_cards(player_id, selected_cards)
+    if "error" in result:
+        return result
 
     # Apply damage to opponent
     opponent_id = game.players[(game.turn_index + 1) % len(game.players)]
@@ -300,7 +317,6 @@ async def play_hand(game_id: str, request: dict):
 
     # Move to the next turn
     game.turn_index = (game.turn_index + 1) % len(game.players)
-    print(f"Its now player {game.turn_index}'s turn")
 
     # Broadcast game state update
     await game.broadcast({
@@ -313,7 +329,12 @@ async def play_hand(game_id: str, request: dict):
         "hand_type": hand_type
     })
 
-    return {"message": f"{player_id} played a hand", "damage": damage}
+    return {
+        "message": f"{player_id} played a hand",
+        "damage": damage,
+        "discarded": result["discarded"],
+        "new_hand": result["new_hand"]
+    }
 
 
 
