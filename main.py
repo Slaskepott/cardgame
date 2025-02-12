@@ -111,6 +111,8 @@ def calculate_damage(cards):
     is_flush = (max(suit_counts.values()) == len(cards)) and len(cards) >= 5
     sorted_ranks = sorted(ranks)
     is_straight = (sorted_ranks == list(range(min(sorted_ranks), min(sorted_ranks) + len(cards)))) and len(cards) >= 5
+    if sorted_ranks == [1,2,3,4,14]:
+        is_straight = True
 
     if is_straight and is_flush:
         hand_type = "royal flush" if max(ranks) == 14 else "straight flush"
@@ -268,7 +270,8 @@ async def discard(game_id: str, request: dict):
     return {
         "message": "Cards discarded and new ones drawn",
         "discarded": [{"rank": c.rank, "suit": c.suit} for c in discarded_cards],
-        "new_hand": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
+        "new_hand": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]],
+        "remaining_discards": game.remaining_discards[player_id]
     }
 
 @app.post("/game/{game_id}/play_hand")
