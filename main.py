@@ -163,10 +163,10 @@ def calculate_damage(cards):
         hand_type = "high card"
 
     multiplier = multipliers[hand_type]
-    base_damage = 2 * len(cards)  # Base damage per card
+    base_damage = sum(ranks)
     total_damage = base_damage * multiplier
 
-    return total_damage, hand_type
+    return total_damage, hand_type, multiplier
 
 @app.get("/game/{game_id}/players")
 def get_players(game_id: str):
@@ -304,7 +304,7 @@ async def play_hand(game_id: str, request: dict):
         return {"error": "No cards selected"}
 
     # Calculate damage based on poker rules
-    damage, hand_type = calculate_damage(selected_cards)
+    damage, hand_type, multiplier = calculate_damage(selected_cards)
 
     # Remove selected cards using the shared function
     result = game.remove_selected_cards(player_id, selected_cards)
@@ -327,14 +327,16 @@ async def play_hand(game_id: str, request: dict):
         "health_update": game.health,
         "next_player": game.players[game.turn_index],
         "hand_type": hand_type,
-        "new_hand": result["new_hand"]
+        "new_hand": result["new_hand"],
+        "multiplier": multiplier,
     })
 
     return {
         "message": f"{player_id} played a hand",
         "damage": damage,
         "discarded": result["discarded"],
-        "new_hand": result["new_hand"]
+        "new_hand": result["new_hand"],
+        "multiplier": multiplier,
     }
 
 
