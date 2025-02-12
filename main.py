@@ -79,43 +79,53 @@ class Game:
         for player in disconnected_players:
             del self.websocket_connections[player]
     
-    def deal_card(self, player_id):
+    def deal_card(self, player_id: str):
         """Draws a random card for a player."""
-        if player_id not in self.player_hands:
-            self.player_hands[player_id] = []
+        if player_id not in self.players:
+            return {"error": "Player not found"}
+
+        player = self.players[player_id]
+
         if not self.deck:
             self.deck = generate_deck()
+
         card = self.deck.pop(random.randint(0, len(self.deck) - 1))
-        self.player_hands[player_id].append(card)
+        player.hand.append(card)
         return card
+
 
     def remove_selected_cards(self, player_id: str, selected_cards: List[dict]) -> dict:
         """Removes selected cards from player's hand and returns discarded cards."""
-        if player_id not in self.player_hands:
+        if player_id not in self.players:
+            return {"error": "Player not found"}
+
+        player = self.players[player_id]
+
+        if not player.hand:
             return {"error": "Player has no hand"}
 
         # Convert selected_cards to a set of (rank, suit) tuples for comparison
         selected_card_tuples = {(card["rank"], card["suit"]) for card in selected_cards}
 
         print(f"Selected: {selected_card_tuples}")
-        print(f"Player {player_id} Hand Before: {[{'rank': c.rank, 'suit': c.suit} for c in self.player_hands[player_id]]}")
+        print(f"Player {player_id} Hand Before: {[{'rank': c.rank, 'suit': c.suit} for c in player.hand]}")
 
         # Remove selected cards from player's hand
-        new_hand = [card for card in self.player_hands[player_id] if (card.rank, card.suit) not in selected_card_tuples]
-        discarded_cards = [card for card in self.player_hands[player_id] if (card.rank, card.suit) in selected_card_tuples]
+        new_hand = [card for card in player.hand if (card.rank, card.suit) not in selected_card_tuples]
+        discarded_cards = [card for card in player.hand if (card.rank, card.suit) in selected_card_tuples]
 
-        if len(new_hand) == len(self.player_hands[player_id]):  # No valid cards were removed
+        if len(new_hand) == len(player.hand):  # No valid cards were removed
             return {"error": "Selected cards not found in hand"}
 
-        self.player_hands[player_id] = new_hand
+        player.hand = new_hand
 
         # Draw new cards to maintain hand size (if possible)
-        while len(self.player_hands[player_id]) < 8 and self.deck:
+        while len(player.hand) < 8 and self.deck:
             self.deal_card(player_id)
 
         return {
             "discarded": [{"rank": c.rank, "suit": c.suit} for c in discarded_cards],
-            "new_hand": [{"rank": c.rank, "suit": c.suit} for c in self.player_hands[player_id]]
+            "new_hand": [{"rank": c.rank, "suit": c.suit} for c in player.hand]
         }
 
 def calculate_damage(cards):
