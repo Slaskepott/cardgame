@@ -228,6 +228,11 @@ async def join_game(game_id: str, player_id: str):
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
 
+    await game.broadcast({
+        "type": "players_updated",
+        "players": list(game.players.keys())
+    })
+
     return {"message": f"{player_id} joined game {game_id}"}
 
 
