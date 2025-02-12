@@ -133,14 +133,14 @@ def calculate_damage(cards):
     multipliers = {
         "high card": 1,
         "pair": 2,
-        "two pair": 3,
-        "three of a kind": 4,
-        "straight": 5,
-        "flush": 6,
-        "full house": 7,
-        "four of a kind": 10,
-        "straight flush": 15,
-        "royal flush": 20
+        "two pair": 2,
+        "three of a kind": 3,
+        "straight": 4,
+        "flush": 4,
+        "full house": 4,
+        "four of a kind": 7,
+        "straight flush": 8,
+        "royal flush": 10
     }
     rank_dict = {
         "2": 2,
