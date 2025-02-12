@@ -353,7 +353,12 @@ async def play_hand(game_id: str, request: dict):
     # Calculate damage
     damage, hand_type, multiplier = calculate_damage(selected_cards)
 
-    # Apply damage
+    # Remove played cards
+    result = game.remove_selected_cards(player_id, selected_cards)
+    if "error" in result:
+        return result
+
+    # Apply damage to opponent
     opponent.health = max(0, opponent.health - damage)
 
     # Check for win condition
@@ -376,7 +381,7 @@ async def play_hand(game_id: str, request: dict):
         "score_update": {p.name: p.wins for p in game.players.values()},
         "next_player": list(game.players.keys())[game.turn_index],
         "hand_type": hand_type,
-        "new_hand": [],
+        "new_hand": result["new_hand"],  # ✅ Send updated hand
         "multiplier": multiplier,
         "winner": winner
     })
@@ -385,9 +390,10 @@ async def play_hand(game_id: str, request: dict):
         "message": f"{player_id} played a hand",
         "damage": damage,
         "multiplier": multiplier,
-        "new_hand": [],
+        "new_hand": result["new_hand"],  # ✅ Send updated hand
         "winner": winner
     }
+
 
 
 
