@@ -286,7 +286,7 @@ async def discard(game_id: str, request: dict):
         "new_hand": result["new_hand"],
         "remaining_discards": game.remaining_discards[player_id]
     }
-}
+
 
 
 @app.post("/game/{game_id}/play_hand")
