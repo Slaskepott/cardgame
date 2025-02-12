@@ -96,16 +96,16 @@ def create_game(game_id: str):
 async def join_game(game_id: str, player_id: str):
     if game_id not in games:
         return {"error": "Game not found"}
-    
+
     game = games[game_id]
     if player_id in game.players:
         return {"error": "Player already in game"}
 
     game.players.append(player_id)
-    game.health[player_id] = 100  
+    game.health[player_id] = 100
     game.player_hands[player_id] = []  
 
-    # ✅ Deal 5 unique cards
+    # ✅ Deal exactly 5 unique cards
     dealt_cards = set()
     while len(dealt_cards) < 5 and game.deck:
         card = game.deal_card(player_id)
@@ -113,27 +113,10 @@ async def join_game(game_id: str, player_id: str):
             dealt_cards.add(card)
 
     game.player_hands[player_id] = list(dealt_cards)
-
     print(f"Dealt hand to {player_id}: {[str(card) for card in game.player_hands[player_id]]}")
 
-    # ✅ Create and send WebSocket message
-    hand_message = {
-        "type": "new_hand",
-        "player": player_id,
-        "cards": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
-    }
+    return {"message": "Joined game", "players": game.players, "hand": [str(c) for c in game.player_hands[player_id]]}
 
-    print(f"Sending WebSocket message to {player_id}: {hand_message}")
-
-    # ✅ Check if WebSocket exists before sending
-    if player_id in game.websocket_connections:
-        try:
-            await game.websocket_connections[player_id].send_json(hand_message)
-            print(f"WebSocket message successfully sent to {player_id}.")
-        except Exception as e:
-            print(f"Error sending WebSocket message: {e}")
-
-    return {"message": "Joined game", "players": game.players, "hand": hand_message["cards"]}
 
 
 @app.websocket("/game/{game_id}/ws/{player_id}")
@@ -153,7 +136,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
             print(f"Received WebSocket message from {player_id}: {data}")
 
             # ✅ Broadcast message to ALL players
-            await game.broadcast({"player": player_id, "data": data})
+            await game.broadcast(data)
 
     except WebSocketDisconnect:
         print(f"WebSocket disconnected: {player_id}")
