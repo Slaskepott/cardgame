@@ -78,9 +78,14 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         while True:
             data = await websocket.receive_json()
             print(f"Received WebSocket message from {player_id}: {data}")
-            await game.broadcast(data)
+
+            # ✅ Broadcast message to ALL players
+            await game.broadcast({"player": player_id, "data": data})
+
     except WebSocketDisconnect:
+        print(f"WebSocket disconnected: {player_id}")
         del game.websocket_connections[player_id]
+
 
 @app.post("/game/{game_id}/play")
 async def play_card(game_id: str, player_id: str, card: str):
