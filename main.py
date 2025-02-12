@@ -98,24 +98,19 @@ async def join_game(game_id: str, player_id: str):
         return {"error": "Game not found"}
 
     game = games[game_id]
+
     if player_id in game.players:
         return {"error": "Player already in game"}
 
+    # ✅ Register player in the game
     game.players.append(player_id)
-    game.health[player_id] = 100
-    game.player_hands[player_id] = []  
+    game.health[player_id] = 100  # Initialize health
+    game.player_hands[player_id] = []  # Empty hand (will be dealt after WebSocket connects)
 
-    # ✅ Deal exactly 5 unique cards
-    dealt_cards = set()
-    while len(dealt_cards) < 5 and game.deck:
-        card = game.deal_card(player_id)
-        if card:
-            dealt_cards.add(card)
+    print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
 
-    game.player_hands[player_id] = list(dealt_cards)
-    print(f"Dealt hand to {player_id}: {[str(card) for card in game.player_hands[player_id]]}")
+    return {"message": f"{player_id} joined game {game_id}"}
 
-    return {"message": "Joined game", "players": game.players, "hand": [str(c) for c in game.player_hands[player_id]]}
 
 
 
@@ -129,6 +124,26 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     await websocket.accept()
     game.websocket_connections[player_id] = websocket
     print(f"WebSocket connected: {player_id}")
+
+    if player_id not in game.player_hands:
+        game.player_hands[player_id] = []  
+        dealt_cards = set()
+        while len(dealt_cards) < 5 and game.deck:
+            card = game.deal_card(player_id)
+            if card:
+                dealt_cards.add(card)
+        game.player_hands[player_id] = list(dealt_cards)
+
+        print(f"Dealt hand to {player_id}: {[str(card) for card in game.player_hands[player_id]]}")
+
+    # ✅ Now, send hand after WebSocket connection
+    hand_message = {
+        "type": "new_hand",
+        "player": player_id,
+        "cards": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
+    }
+    await websocket.send_json(hand_message)
+    print(f"Sent hand to {player_id} via WebSocket.")
 
     try:
         while True:
