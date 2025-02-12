@@ -107,9 +107,9 @@ def calculate_damage(cards):
         ranks.append(rank)
 
     rank_frequencies = sorted(rank_counts.values(), reverse=True)
-    is_flush = max(suit_counts.values()) == len(cards)
+    is_flush = (max(suit_counts.values()) == len(cards)) and len(cards) >= 5
     sorted_ranks = sorted(ranks)
-    is_straight = sorted_ranks == list(range(min(sorted_ranks), min(sorted_ranks) + len(cards)))
+    is_straight = (sorted_ranks == list(range(min(sorted_ranks), min(sorted_ranks) + len(cards)))) and len(cards) >= 5
 
     if is_straight and is_flush:
         hand_type = "royal flush" if max(ranks) == 14 else "straight flush"
