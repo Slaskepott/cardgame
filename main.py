@@ -22,6 +22,7 @@ class Game:
         self.players: List[str] = []
         self.turn_index: int = 0
         self.state: Dict = {}
+        self.health: Dict[str, int] = {}  # Store player health
         self.websocket_connections: Dict[str, WebSocket] = {}
         self.lock = asyncio.Lock()
 
@@ -61,7 +62,12 @@ async def join_game(game_id: str, player_id: str):
         return {"error": "Player already in game"}
 
     game.players.append(player_id)
-    return {"message": "Joined game", "players": game.players}
+    game.health[player_id] = 100  # ✅ Set initial health to 100
+
+    # Notify all players of health updates
+    await game.broadcast({"type": "health_update", "player": player_id, "health": 100})
+
+    return {"message": "Joined game", "players": game.players, "health": game.health}
 
 @app.websocket("/game/{game_id}/ws/{player_id}")
 async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
