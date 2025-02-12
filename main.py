@@ -103,12 +103,29 @@ async def join_game(game_id: str, player_id: str):
 
     game.players.append(player_id)
     game.health[player_id] = 100  # ✅ Set initial health to 100
+    game.player_hands[player_id] = []  # ✅ Initialize player's hand
 
-    # ✅ Broadcast full health state to all players
+    # ✅ Deal 5 cards to the player
+    for _ in range(5):
+        card = game.deal_card(player_id)
+        if card:
+            game.player_hands[player_id].append(card)
+
+    # ✅ Notify all players about health update
     health_status = {"type": "health_update", "players_health": game.health}
     await game.broadcast(health_status)
 
-    return {"message": "Joined game", "players": game.players, "health": game.health}
+    # ✅ Send player's hand via WebSocket
+    hand_message = {
+        "type": "new_hand",
+        "player": player_id,
+        "cards": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
+    }
+    if player_id in game.websocket_connections:
+        await game.websocket_connections[player_id].send_json(hand_message)
+
+    return {"message": "Joined game", "players": game.players, "hand": hand_message["cards"]}
+
 
 @app.websocket("/game/{game_id}/ws/{player_id}")
 async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
