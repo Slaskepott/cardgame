@@ -105,30 +105,29 @@ async def join_game(game_id: str, player_id: str):
     game.health[player_id] = 100  
     game.player_hands[player_id] = []  
 
-    # ✅ Deal 5 cards to the player
-    for _ in range(5):
+    # ✅ Ensure exactly 5 cards are dealt
+    dealt_cards = set()
+    while len(dealt_cards) < 5 and game.deck:
         card = game.deal_card(player_id)
         if card:
-            game.player_hands[player_id].append(card)
+            dealt_cards.add(card)
 
-    # ✅ Print hand to debug
-    print(f"Dealt hand to {player_id}: {game.player_hands[player_id]}")
+    game.player_hands[player_id] = list(dealt_cards)
 
-    # ✅ Notify the player of their hand via WebSocket
+    # ✅ Debugging: Print actual dealt hand
+    print(f"Dealt hand to {player_id}: {[str(card) for card in game.player_hands[player_id]]}")
+
+    # ✅ Send player's hand via WebSocket
     hand_message = {
         "type": "new_hand",
         "player": player_id,
         "cards": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
     }
-
-    # ✅ Ensure the message is sent only to the player who joined
     if player_id in game.websocket_connections:
         await game.websocket_connections[player_id].send_json(hand_message)
         print(f"Sent hand to {player_id} via WebSocket.")
 
     return {"message": "Joined game", "players": game.players, "hand": hand_message["cards"]}
-
-
 
 @app.websocket("/game/{game_id}/ws/{player_id}")
 async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
