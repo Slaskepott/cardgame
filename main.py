@@ -26,8 +26,16 @@ class Game:
         self.lock = asyncio.Lock()
 
     async def broadcast(self, message: dict):
-        for ws in self.websocket_connections.values():
-            await ws.send_json(message)
+        disconnected_players = []
+        for player, ws in self.websocket_connections.items():
+            try:
+                await ws.send_json(message)
+            except Exception:
+                disconnected_players.append(player)
+
+        # Remove disconnected players
+        for player in disconnected_players:
+            del self.websocket_connections[player]
 
 @app.get("/game/{game_id}/players")
 def get_players(game_id: str):
