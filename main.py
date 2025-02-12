@@ -78,13 +78,29 @@ def calculate_damage(cards):
         "straight flush": 15,
         "royal flush": 20
     }
+    rank_dict = {
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5,
+        "6": 6,
+        "7": 7,
+        "8": 8,
+        "9": 9,
+        "10": 10,
+        "J": 11,
+        "Q": 12,
+        "K": 13,
+        "A": 14
+    }
+
 
     rank_counts = {}
     suit_counts = {}
     ranks = []
     
     for card in cards:
-        rank = card["rank"]
+        rank = rank_dict[card["rank"]]
         suit = card["suit"]
         rank_counts[rank] = rank_counts.get(rank, 0) + 1
         suit_counts[suit] = suit_counts.get(suit, 0) + 1
