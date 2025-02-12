@@ -197,7 +197,7 @@ def calculate_damage(cards):
         hand_type = "high card"
 
     multiplier = multipliers[hand_type]
-    base_damage = sum(ranks)
+    base_damage = sum(ranks) // 5
     total_damage = base_damage * multiplier
 
     return total_damage, hand_type, multiplier
