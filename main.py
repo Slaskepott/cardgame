@@ -326,7 +326,8 @@ async def play_hand(game_id: str, request: dict):
         "damage": damage,
         "health_update": game.health,
         "next_player": game.players[game.turn_index],
-        "hand_type": hand_type
+        "hand_type": hand_type,
+        "new_hand": result["new_hand"]
     })
 
     return {
