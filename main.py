@@ -143,7 +143,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         "cards": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
     }
     await websocket.send_json(hand_message)
-    print(f"Sent hand to {player_id} via WebSocket.")
+    print(f"Sent hand to {player_id} via WebSocket: {game.player_hands[player_id]}")
 
     try:
         while True:
