@@ -2,8 +2,18 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from uuid import uuid4
 from typing import Dict, List, Optional
 import asyncio
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# Allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change this to your frontend URL for security
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 games: Dict[str, dict] = {}
 
