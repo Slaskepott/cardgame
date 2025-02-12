@@ -162,7 +162,7 @@ async def join_game(game_id: str, player_id: str):
 
     # ✅ Register player in the game
     game.players.append(player_id)
-    game.health[player_id] = 1000  # Initialize health
+    game.health[player_id] = 100  # Initialize health
     game.player_hands[player_id] = []  # Empty hand (will be dealt after WebSocket connects)
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
