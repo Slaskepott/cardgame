@@ -220,20 +220,35 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
 async def discard(game_id: str, request: dict):
     if game_id not in games:
         return {"error": "Game not found"}
+
     game = games[game_id]
     player_id = request.get("player_id")
     selected_cards = request.get("cards", [])
+
     if player_id != game.players[game.turn_index]:
         return {"error": "Not your turn"}
     if not selected_cards:
         return {"error": "No cards selected"}
-    hand = game.player_hands[player_id]
-    for card in selected_cards:
-        hand.remove(card)
-    
+    if player_id not in game.player_hands:
+        return {"error": "Player has no hand"}
+
+    # Convert selected_cards to a set of (rank, suit) tuples for comparison
+    selected_card_tuples = {(card["rank"], card["suit"]) for card in selected_cards}
+
+    # Remove selected cards from player's hand
+    new_hand = [card for card in game.player_hands[player_id] if (card.rank, card.suit) not in selected_card_tuples]
+    discarded_cards = [card for card in game.player_hands[player_id] if (card.rank, card.suit) in selected_card_tuples]
+
+    if len(new_hand) == len(game.player_hands[player_id]):  # No valid cards were removed
+        return {"error": "Selected cards not found in hand"}
+
+    game.player_hands[player_id] = new_hand
+
     # Draw new cards to maintain hand size (if possible)
     while len(game.player_hands[player_id]) < 8 and game.deck:
-        game.deal_card(player_id)
+        new_card = game.deal_card(player_id)
+        if new_card:
+            game.player_hands[player_id].append(new_card)
 
     # Broadcast updated hand to player
     hand_message = {
@@ -248,7 +263,6 @@ async def discard(game_id: str, request: dict):
         "discarded": [{"rank": c.rank, "suit": c.suit} for c in discarded_cards],
         "new_hand": [{"rank": c.rank, "suit": c.suit} for c in game.player_hands[player_id]]
     }
-    
 
 @app.post("/game/{game_id}/play_hand")
 async def play_hand(game_id: str, request: dict):
