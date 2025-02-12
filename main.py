@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
 from typing import Dict, List, Optional
 import asyncio
+import random
 
 app = FastAPI()
 
@@ -17,26 +18,52 @@ app.add_middleware(
 
 games: Dict[str, dict] = {}
 
+class Card:
+    def __init__(self, rank: str, suit: str, base_damage: int = 5):
+        self.rank = rank  # e.g., "Ace", "2", "King"
+        self.suit = suit  # e.g., "Hearts", "Spades"
+        self.base_damage = base_damage
+
+    def __repr__(self):
+        return f"{self.rank} of {self.suit}"
+
+def generate_deck():
+    ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+    suits = ["Hearts", "Diamonds", "Clubs", "Spades"]
+    return [Card(rank, suit) for rank in ranks for suit in suits]
+
 class Game:
     def __init__(self):
         self.players: List[str] = []
         self.turn_index: int = 0
-        self.state: Dict = {}
-        self.health: Dict[str, int] = {}  # Store player health
+        self.health: Dict[str, int] = {}
         self.websocket_connections: Dict[str, WebSocket] = {}
         self.lock = asyncio.Lock()
+        self.deck = generate_deck()  # ✅ Full deck of 52 cards
+        self.player_hands: Dict[str, List[Card]] = {}
 
-    async def broadcast(self, message: dict):
-        disconnected_players = []
-        for player, ws in self.websocket_connections.items():
-            try:
-                await ws.send_json(message)
-            except Exception:
-                disconnected_players.append(player)
+    def deal_card(self, player_id):
+        """Draws a random card for a player."""
+        if player_id not in self.player_hands:
+            self.player_hands[player_id] = []
+        if self.deck:
+            card = self.deck.pop(random.randint(0, len(self.deck) - 1))
+            self.player_hands[player_id].append(card)
+            return card
+        return None
 
-        # Remove disconnected players
-        for player in disconnected_players:
-            del self.websocket_connections[player]
+def calculate_damage(hand: List[Card]):
+    """Evaluates a hand and returns damage based on poker multipliers."""
+    rank_counts = {}
+    for card in hand:
+        rank_counts[card.rank] = rank_counts.get(card.rank, 0) + 1
+
+    # Find the highest match (pair, three of a kind, etc.)
+    max_match = max(rank_counts.values(), default=1)
+    multiplier = max_match  # Pair = 2x, Three of a kind = 3x, etc.
+
+    base_damage = sum(card.base_damage for card in hand)
+    return base_damage * multiplier  # Apply multiplier
 
 @app.get("/game/{game_id}/players")
 def get_players(game_id: str):
@@ -94,23 +121,36 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         del game.websocket_connections[player_id]
 
 
-@app.post("/game/{game_id}/play")
-async def play_card(game_id: str, player_id: str, card: str):
+@app.post("/game/{game_id}/play_card")
+async def play_card(game_id: str, player_id: str):
     if game_id not in games:
         return {"error": "Game not found"}
-    
+
     game = games[game_id]
-    async with game.lock:
-        if game.players[game.turn_index] != player_id:
-            return {"error": "Not your turn"}
+    
+    if player_id != game.players[game.turn_index]:
+        return {"error": "Not your turn"}
 
-        game.state[player_id] = card
+    card = game.deal_card(player_id)
+    if not card:
+        return {"error": "No more cards in deck"}
 
-        # ✅ Explicitly broadcast the update to all players
-        message = {"type": "play", "player": player_id, "card": card}
-        await game.broadcast(message)
+    damage = calculate_damage(game.player_hands[player_id])
 
-        return {"message": "Card played", "card": card}
+    # Apply damage to opponent
+    opponent_id = game.players[(game.turn_index + 1) % len(game.players)]
+    game.health[opponent_id] = max(0, game.health[opponent_id] - damage)
+
+    # ✅ Broadcast update
+    await game.broadcast({
+        "type": "card_played",
+        "player": player_id,
+        "card": str(card),
+        "damage": damage,
+        "health_update": game.health
+    })
+
+    return {"message": f"{player_id} played {card}. Dealt {damage} damage."}
 
 
 @app.post("/game/{game_id}/end_turn")
