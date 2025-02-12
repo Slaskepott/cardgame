@@ -60,7 +60,9 @@ class Game:
         if player_id not in self.player_hands:
             self.player_hands[player_id] = []
         if self.deck:
+            print(f"Before dealing: {len(self.deck)}")
             card = self.deck.pop(random.randint(0, len(self.deck) - 1))
+            print(f"After dealing: {len(self.deck)}")
             self.player_hands[player_id].append(card)
             return card
         return None
