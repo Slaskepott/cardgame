@@ -173,9 +173,18 @@ def calculate_damage(cards):
     rank_frequencies = sorted(rank_counts.values(), reverse=True)
     is_flush = (max(suit_counts.values()) == len(cards)) and len(cards) >= 5
     sorted_ranks = sorted(ranks)
-    is_straight = (sorted_ranks == list(range(min(sorted_ranks), min(sorted_ranks) + len(cards)))) and len(cards) >= 5
-    if sorted_ranks == [1,2,3,4,14]:
-        is_straight = True
+    sorted_ranks = sorted(set(ranks))  # Remove duplicates and sort
+    is_straight = False
+
+    if len(sorted_ranks) >= 5:
+        for i in range(len(sorted_ranks) - 4):
+            if sorted_ranks[i + 4] - sorted_ranks[i] == 4:  # Consecutive check
+                is_straight = True
+                break
+
+        # Ace-low straight check (A, 2, 3, 4, 5)
+        if sorted_ranks[-5:] == [2, 3, 4, 5, 14]:
+            is_straight = True
 
     if is_straight and is_flush:
         hand_type = "royal flush" if max(ranks) == 14 else "straight flush"
@@ -274,13 +283,10 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     try:
         while True:
             data = await websocket.receive_json()
-            print(f"Received WebSocket message from {player_id}: {data}")
-
-            # ✅ Broadcast message to ALL players
             await game.broadcast(data)
-
     except WebSocketDisconnect:
         print(f"WebSocket disconnected: {player_id}")
+    finally:
         del game.websocket_connections[player_id]
 
 
@@ -350,8 +356,10 @@ async def play_hand(game_id: str, request: dict):
     opponent_id = [pid for pid in game.players if pid != player_id][0]
     opponent = game.players[opponent_id]
 
-    if player_id != list(game.players.keys())[game.turn_index]:
-        return {"error": "Not your turn"}
+    async with game.lock:
+        if player_id != list(game.players.keys())[game.turn_index]:
+            return {"error": "Not your turn"}
+            
     if not selected_cards:
         return {"error": "No cards selected"}
 
