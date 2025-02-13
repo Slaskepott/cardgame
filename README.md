@@ -4,7 +4,7 @@ Something something cool description
 
 ## How to play
 
-Go to my [Website](https://example.com)
+Go to [slaskecards](https://slaskecards.com). If you're here in 2026, my domain is expired :(
 
 
 ## Thanks
