@@ -1,9 +1,8 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
-from typing import Dict, List, Optional
+from typing import Dict
 from game import Game
-import asyncio
 import random
 
 app = FastAPI()
@@ -189,6 +188,9 @@ async def play_hand(game_id: str, request: dict):
         player.wins += 1
         game.reset_game()
 
+    #Increase discards
+    player.remaining_discards += 1
+
     # Move turn
     game.turn_index = (game.turn_index + 1) % len(game.players)
 
@@ -204,7 +206,8 @@ async def play_hand(game_id: str, request: dict):
         "hand_type": hand_type,
         "new_hand": result["new_hand"],  # ✅ Send updated hand
         "multiplier": multiplier,
-        "winner": winner
+        "winner": winner,
+        "remaining_discards": player.remaining_discards,
     })
 
     return {
