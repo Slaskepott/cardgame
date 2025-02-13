@@ -11,6 +11,15 @@ class Upgrade:
     def __repr__(self):
         return f"{self.rarity} {self.name} (Tier {self.tier}) - {self.effect} (Cost: {self.cost})"
 
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "tier": self.tier,
+            "rarity": self.rarity,
+            "effect": self.effect,
+            "cost": self.cost
+        }
+
 class UpgradeStore:
     def __init__(self):
         self.upgrades = {
