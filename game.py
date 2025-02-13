@@ -5,6 +5,7 @@ from fastapi import WebSocket
 import asyncio
 import random
 from upgrades import UpgradeStore
+import traceback
 
 class Game:
     def __init__(self):
@@ -27,6 +28,7 @@ class Game:
         self.turn_index = 0
         await self.open_upgrade_store()
 
+
     async def open_upgrade_store(self):
         """Send each player a unique selection of upgrades."""
         for player_id, ws in self.websocket_connections.items():
@@ -37,8 +39,10 @@ class Game:
                     "player": player_id,
                     "upgrades": store_selection
                 })
-            except Exception:
-                print(f"Failed to send store selection to {player_id}")
+            except Exception as e:
+                print(f"Failed to send store selection to {player_id}: {e}")
+                traceback.print_exc()
+
 
 
 
