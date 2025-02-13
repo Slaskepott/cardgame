@@ -189,7 +189,8 @@ async def play_hand(game_id: str, request: dict):
         game.reset_game()
 
     #Increase discards
-    player.remaining_discards += 1
+    if player.remaining_discards == 0:
+        player.remaining_discards += 1
 
     # Move turn
     game.turn_index = (game.turn_index + 1) % len(game.players)
