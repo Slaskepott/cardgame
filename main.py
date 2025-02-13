@@ -186,7 +186,7 @@ async def play_hand(game_id: str, request: dict):
     if opponent.health == 0:
         winner = player_id
         player.wins += 1
-        game.reset_game()
+        await game.reset_game()
 
     #Increase discards
     if player.remaining_discards == 0:
