@@ -10,7 +10,7 @@ class Player:
         self.wins = 0
         self.hand: List[Card] = []
         self.remaining_discards = 1
-        self.upgrades = List[Upgrade] = []
+        self.upgrades: List[Upgrade] = []
 
     def reset(self):
         """Resets player for a new round but keeps wins."""
