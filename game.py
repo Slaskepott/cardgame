@@ -4,6 +4,7 @@ from player import Player
 from fastapi import WebSocket
 import asyncio
 import random
+from upgrades import UpgradeStore
 
 class Game:
     def __init__(self):
@@ -12,17 +13,34 @@ class Game:
         self.websocket_connections: Dict[str, WebSocket] = {}
         self.lock = asyncio.Lock()
         self.deck = self.generate_deck()
+        self.upgrade_store = UpgradeStore()
 
     def add_player(self, player_name: str):
         if player_name not in self.players:
             self.players[player_name] = Player(player_name)
 
-    def reset_game(self):
+    async def reset_game(self):
         """Resets all players but keeps scores."""
         self.deck = self.generate_deck()
         for player in self.players.values():
             player.reset()
         self.turn_index = 0
+        await self.open_upgrade_store()
+
+    async def open_upgrade_store(self):
+        """Send each player a unique selection of upgrades."""
+        for player_id, ws in self.websocket_connections.items():
+            try:
+                store_selection = self.upgrade_store.get_selection_of_upgrades()
+                await ws.send_json({
+                    "type": "open_store",
+                    "player": player_id,
+                    "upgrades": store_selection
+                })
+            except Exception:
+                print(f"Failed to send store selection to {player_id}")
+
+
 
     async def broadcast(self, message: dict):
         disconnected_players = []

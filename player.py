@@ -1,5 +1,6 @@
 from typing import List
 from card import Card
+from upgrades import Upgrade
 
 class Player:
     def __init__(self, name: str):
@@ -9,6 +10,7 @@ class Player:
         self.wins = 0
         self.hand: List[Card] = []
         self.remaining_discards = 1
+        self.upgrades = list[Upgrade] = []
 
     def reset(self):
         """Resets player for a new round but keeps wins."""
