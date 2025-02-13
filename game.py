@@ -34,17 +34,16 @@ class Game:
         for player_id, ws in self.websocket_connections.items():
             try:
                 store_selection = self.upgrade_store.get_selection_of_upgrades()
+                serialized_upgrades = [upgrade.to_dict() for upgrade in store_selection]
+                
                 await ws.send_json({
                     "type": "open_store",
                     "player": player_id,
-                    "upgrades": store_selection
+                    "upgrades": serialized_upgrades
                 })
             except Exception as e:
                 print(f"Failed to send store selection to {player_id}: {e}")
                 traceback.print_exc()
-
-
-
 
     async def broadcast(self, message: dict):
         disconnected_players = []
