@@ -25,7 +25,6 @@ def get_players(game_id: str):
     
     return {"players": list(games[game_id].players.keys())}
 
-
 @app.post("/game/create/{game_id}")
 def create_game(game_id: str):
     if game_id in games:
@@ -50,7 +49,6 @@ async def join_game(game_id: str, player_id: str):
     })
 
     return {"message": f"{player_id} joined game {game_id}"}
-
 
 @app.websocket("/game/{game_id}/ws/{player_id}")
 async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
@@ -95,7 +93,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         print(f"WebSocket disconnected: {player_id}")
     finally:
         del game.websocket_connections[player_id]
-
 
 @app.post("/game/{game_id}/discard")
 async def discard(game_id: str, request: dict):
@@ -144,9 +141,6 @@ async def discard(game_id: str, request: dict):
         "remaining_discards": player.remaining_discards
     }
 
-
-
-
 @app.post("/game/{game_id}/play_hand")
 async def play_hand(game_id: str, request: dict):
     if game_id not in games:
@@ -189,11 +183,11 @@ async def play_hand(game_id: str, request: dict):
         await game.reset_game()
 
     #Increase discards
-    if player.remaining_discards == 0:
-        player.remaining_discards += 1
+    player.remaining_discards = player.max_discards
 
     # Move turn
     game.turn_index = (game.turn_index + 1) % len(game.players)
+    player.gold += multiplier #placeholder
 
     # Broadcast update
     await game.broadcast({
@@ -202,6 +196,7 @@ async def play_hand(game_id: str, request: dict):
         "cards": selected_cards,
         "damage": damage,
         "health_update": {p.name: p.health for p in game.players.values()},
+        "max_health_update": {p.name: p.max_health for p in game.players.values()},
         "score_update": {p.name: p.wins for p in game.players.values()},
         "next_player": list(game.players.keys())[game.turn_index],
         "hand_type": hand_type,
@@ -209,6 +204,7 @@ async def play_hand(game_id: str, request: dict):
         "multiplier": multiplier,
         "winner": winner,
         "remaining_discards": player.remaining_discards,
+        "gold": multiplier #placeholder
     })
 
     return {
@@ -218,10 +214,6 @@ async def play_hand(game_id: str, request: dict):
         "new_hand": result["new_hand"],  # ✅ Send updated hand
         "winner": winner
     }
-
-
-
-
 
 @app.post("/game/{game_id}/end_turn")
 async def end_turn(game_id: str, player_id: str):
@@ -245,3 +237,24 @@ async def end_turn(game_id: str, player_id: str):
 
         return {"message": "Turn ended", "next_player": next_player}
 
+@app.post("/game/{gameId}/{playerId}/buyupgrade/{upgrade_id}")
+async def add_upgrade(gameId: str, playerId: str, upgrade_id: str):
+
+    if gameId not in games:
+        return {"error": "Game not found"}
+    game = games[gameId]
+    price = game.get_price(upgrade_id)
+    player = game.players[playerId]
+    print(f"Type of price: {type(price)} and player.gold {type(player.gold)}")
+    print(f"Is {price} > {player.gold}?")
+    if price > player.gold:
+        return {"message": "Not enough gold"}
+    player.gold -= price
+
+    async with game.lock:
+        await game.add_upgrade(playerId, upgrade_id)
+        await game.apply_upgrades(playerId)
+        return {
+            "message":f"{playerId} bought upgrade {upgrade_id}",
+            "price":price
+        }

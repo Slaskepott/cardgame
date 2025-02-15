@@ -20,11 +20,15 @@ class Game:
         if player_name not in self.players:
             self.players[player_name] = Player(player_name)
 
+    def get_price(self, upgrade_id):
+        return self.upgrade_store.get_price_by_id(upgrade_id)
+
     async def reset_game(self):
         """Resets all players but keeps scores."""
         self.deck = self.generate_deck()
         for player in self.players.values():
             player.reset()
+        
         self.turn_index = 0
         await self.open_upgrade_store()
 
@@ -44,6 +48,10 @@ class Game:
             except Exception as e:
                 print(f"Failed to send store selection to {player_id}: {e}")
                 traceback.print_exc()
+    
+    async def apply_upgrades(self,playerId):
+        await self.broadcast(self.players[playerId].apply_upgrades())
+
 
     async def broadcast(self, message: dict):
         disconnected_players = []
@@ -56,6 +64,11 @@ class Game:
         # Remove disconnected players
         for player in disconnected_players:
             del self.websocket_connections[player]
+    
+    async def add_upgrade(self, playerId, upgradeId):
+        player = self.players[playerId]
+        player.upgrades.append(self.upgrade_store.get_upgrade_by_id(upgradeId))
+        print(f"Added upgrade {upgradeId} to player {playerId}")
     
     def deal_card(self, player_id: str):
         """Draws a random card for a player."""
@@ -189,7 +202,7 @@ class Game:
             hand_type = "high card"
 
         multiplier = multipliers[hand_type]
-        base_damage = sum(ranks) // 5
+        base_damage = sum(ranks)
         total_damage = base_damage * multiplier
 
         return total_damage, hand_type, multiplier
