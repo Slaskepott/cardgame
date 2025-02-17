@@ -203,6 +203,6 @@ class Game:
 
         multiplier = multipliers[hand_type]
         base_damage = sum(ranks)
-        total_damage = base_damage * multiplier
+        total_damage = (base_damage // 5)* multiplier
 
         return total_damage, hand_type, multiplier
