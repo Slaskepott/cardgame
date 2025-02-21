@@ -50,24 +50,25 @@ class UpgradeStore:
 
     def _initialize_upgrades(self):
         # Increase Health
-        self.add_upgrade(1, "Increase Health", 1, "common", "+20 HP", 2)
-        self.add_upgrade(2, "Increase Health", 2, "uncommon", "+40 HP", 5)
-        self.add_upgrade(3, "Increase Health", 3, "rare", "+60 HP", 8)
+        self.add_upgrade(1, "Increase Health", 1, "common", "+20 HP", 4)
+        self.add_upgrade(2, "Increase Health", 2, "uncommon", "+40 HP", 10)
+        self.add_upgrade(3, "Increase Health", 3, "rare", "+60 HP", 16)
 
         # Increase Health Percentage
-        self.add_upgrade(4, "Increase Health %", 1, "common", "+25% HP", 2)
-        self.add_upgrade(5, "Increase Health %", 2, "uncommon", "+50% HP", 4)
+        self.add_upgrade(4, "Increase Health %", 1, "common", "+25% HP", 4)
+        self.add_upgrade(5, "Increase Health %", 2, "uncommon", "+50% HP", 8)
 
         # Increase Discards
-        self.add_upgrade(6, "Increase Discards", 1, "common", "+1 Discard", 3)
-        self.add_upgrade(7, "Increase Discards", 2, "rare", "+2 Discards", 6)
-        self.add_upgrade(8, "Increase Discards", 3, "legendary", "+3 Discards", 11)
+        self.add_upgrade(6, "Increase Discards", 1, "common", "+1 Discard", 6)
+        self.add_upgrade(7, "Increase Discards", 2, "rare", "+2 Discards", 12)
+        self.add_upgrade(8, "Increase Discards", 3, "legendary", "+3 Discards", 22)
 
         # Increase Damage
-        self.add_upgrade(9, "Increase Damage", 1, "uncommon", "+10% Damage", 4)
-        self.add_upgrade(10, "Increase Damage", 2, "rare", "+20% Damage", 6)
-        self.add_upgrade(11, "Increase Damage", 3, "epic", "+30% Damage", 9)
-        self.add_upgrade(12, "Increase Damage", 4, "legendary", "+50% Damage", 12)
+        self.add_upgrade(9, "Increase Damage", 1, "uncommon", "+10% Damage", 8)
+        self.add_upgrade(10, "Increase Damage", 2, "rare", "+20% Damage", 12)
+        self.add_upgrade(11, "Increase Damage", 3, "epic", "+30% Damage", 18)
+        self.add_upgrade(12, "Increase Damage", 4, "legendary", "+50% Damage", 24)
+
 
         # Elemental Damage (Earth, Fire, Water, Air)
         elements = ["Earth", "Fire", "Water", "Air"]
@@ -92,13 +93,14 @@ class UpgradeStore:
         return self.upgrades
     
     def get_selection_of_upgrades(self):
-        selection = []
+        selection = set()
         rarity_weights = {"common": 20, "uncommon": 10, "rare": 5, "epic": 3, "legendary": 1}
         rarities = list(self.upgrades.keys())
-        
+
         while len(selection) < 5:
             chosen_rarity = random.choices(rarities, weights=[rarity_weights[r] for r in rarities], k=1)[0]
             if self.upgrades[chosen_rarity]:
-                selection.append(random.choice(self.upgrades[chosen_rarity]))
-        
-        return selection
+                upgrade = random.choice(self.upgrades[chosen_rarity])
+                selection.add(upgrade)
+
+        return list(selection)

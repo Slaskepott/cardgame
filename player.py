@@ -59,4 +59,8 @@ class Player:
         self.health = self.max_health
         self.remaining_discards = self.max_discards
 
-        return {"type":"change_max_health","player":self.name,"health":self.health,"max_health":self.max_health}
+        return {"type":"apply_upgrades",
+                "player":self.name,
+                "health":self.health,
+                "max_health":self.max_health,
+                "max_discards":self.max_discards}

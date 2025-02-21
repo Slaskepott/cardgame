@@ -124,7 +124,7 @@ class Game:
         suits = ["Fire", "Air", "Earth", "Water"]
         return [Card(rank, suit) for rank in ranks for suit in suits] * 10
 
-    def calculate_damage(self, cards):
+    def calculate_damage(self, cards, player_id):
         """Evaluates a hand and returns damage and hand type based on poker multipliers."""
         multipliers = {
             "high card": 1,
@@ -158,6 +158,15 @@ class Game:
         rank_counts = {}
         suit_counts = {}
         ranks = []
+        base_values = []
+        player = self.players[player_id]
+        modifier_dict = {
+            "Water": player.water_damage_modifier,
+            "Fire": player.fire_damage_modifier,
+            "Air": player.air_damage_modifier,
+            "Earth": player.earth_damage_modifier
+        }
+        
         
         for card in cards:
             rank = rank_dict[card["rank"]]
@@ -165,6 +174,9 @@ class Game:
             rank_counts[rank] = rank_counts.get(rank, 0) + 1
             suit_counts[suit] = suit_counts.get(suit, 0) + 1
             ranks.append(rank)
+            base_values.append(rank * modifier_dict[suit])
+            if modifier_dict[suit] > 1.0:
+                print(f"Applied {modifier_dict[suit]} modifier to {suit} {rank} card")
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)
         is_flush = (max(suit_counts.values()) == len(cards)) and len(cards) >= 5
@@ -202,7 +214,7 @@ class Game:
             hand_type = "high card"
 
         multiplier = multipliers[hand_type]
-        base_damage = sum(ranks)
+        base_damage = sum(base_values) // 5
         total_damage = base_damage * multiplier
 
         return total_damage, hand_type, multiplier

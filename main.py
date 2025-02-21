@@ -4,6 +4,7 @@ from uuid import uuid4
 from typing import Dict
 from game import Game
 import random
+import math
 
 app = FastAPI()
 
@@ -53,12 +54,14 @@ async def join_game(game_id: str, player_id: str):
 @app.websocket("/game/{game_id}/ws/{player_id}")
 async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     if game_id not in games:
+        print(f"Game ID {game_id} not found in games.")
         await websocket.close()
         return
 
     game = games[game_id]
 
     if player_id not in game.players:
+        print(f"Player ID {game_id} not found in games.")
         await websocket.close()
         return
 
@@ -165,7 +168,7 @@ async def play_hand(game_id: str, request: dict):
         return {"error": "No cards selected"}
 
     # Calculate damage
-    damage, hand_type, multiplier = game.calculate_damage(selected_cards)
+    damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
 
     # Remove played cards
     result = game.remove_selected_cards(player_id, selected_cards)
