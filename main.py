@@ -5,6 +5,11 @@ from typing import Dict
 from game import Game
 import random
 import math
+import stripe
+import os
+
+stripe.api_key = os.environ.get("stripe_api_key")
+
 
 app = FastAPI()
 
