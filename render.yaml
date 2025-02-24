@@ -1,9 +1,29 @@
+# Exported from Render on 2025-02-24T12:59:03Z
+databases:
+- name: slaskecards
+  databaseName: slaskecards
+  user: slaskecards
+  plan: free
+  region: frankfurt
+  ipAllowList:
+  - source: 0.0.0.0/0
+    description: everywhere
+  postgresMajorVersion: "16"
 services:
-  # A Docker web service
-  - type: web
-    name: fastapi-example
-    runtime: python
-    plan: free
-    autoDeploy: false
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+- type: web
+  name: cardgame
+  runtime: python
+  repo: https://github.com/Slaskepott/cardgame
+  plan: starter
+  envVars:
+  - key: db_pw
+    fromDatabase:
+      name: slaskecards
+      property: password
+  - key: stripe_api_key
+    sync: false
+  region: oregon
+  buildCommand: pip install -r requirements.txt
+  startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+  autoDeploy: false
+version: "1"
