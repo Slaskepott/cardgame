@@ -55,6 +55,15 @@ def addOrRemoveSlaskecoins(email: str, amount: int) -> int:
     finally:
         session.close()
 
+
+
+
+stripe.api_key = os.environ.get("stripe_api_key")
+
+
+app = FastAPI()
+
+@app.get("/slaskecoins/{email}")
 def getSlaskecoins(email: str) -> int:
     """
     Retrieves the current number of slaskecoins for the given email.
@@ -66,12 +75,6 @@ def getSlaskecoins(email: str) -> int:
         return player.slaskecoins if player else 0
     finally:
         session.close()
-
-
-stripe.api_key = os.environ.get("stripe_api_key")
-
-
-app = FastAPI()
 
 # Enable CORS
 app.add_middleware(
@@ -86,7 +89,8 @@ app.add_middleware(
 def create_payment(
     amount: int = Body(...),
     currency: str = Body("usd"),
-    description: str = Body("Payment from FastAPI")
+    description: str = Body("Payment from FastAPI"),
+    email: str = ""
 ):
     try:
         payment_intent = stripe.PaymentIntent.create(
@@ -94,6 +98,7 @@ def create_payment(
             currency=currency,
             description=description,
         )
+        addOrRemoveSlaskecoins(email, amount)
         return {"client_secret": payment_intent.client_secret}
     except Exception as e:
         return {"error": str(e)}
