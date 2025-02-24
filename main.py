@@ -65,17 +65,26 @@ stripe.api_key = os.environ.get("stripe_api_key")
 app = FastAPI()
 
 @app.get("/slaskecoins/{email}")
-def getSlaskecoins(email: str) -> int:
-    """
-    Retrieves the current number of slaskecoins for the given email.
-    If the user does not exist, returns 0.
-    """
+def get_slaskecoins(email: str) -> int:
     session = SessionLocal()
     try:
+        # Print all records from the PlayerCurrency table
+        all_players = session.query(PlayerCurrency).all()
+        print("Entire database:")
+        for record in all_players:
+            print(record)
+        
+        # Query for the specific player by email
         player = session.query(PlayerCurrency).filter(PlayerCurrency.email == email).first()
+        
+        # Print the session object and the result of the query
+        print("Session object:", session)
+        print("Queried player:", player)
+        
         return player.slaskecoins if player else 0
     finally:
         session.close()
+
 
 # Enable CORS
 app.add_middleware(
