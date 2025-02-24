@@ -1,2 +1,5 @@
 fastapi[all]
 stripe
+uvicorn
+sqlalchemy
+psycopg2-binary
