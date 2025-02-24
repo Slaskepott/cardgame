@@ -78,11 +78,12 @@ def get_slaskecoins(email: str) -> int:
     
     session = SessionLocal()
     try:
-        # Print the entire database records
+        # Print the entire database records with email details
         all_players = session.query(PlayerCurrency).all()
         print("Entire database:")
         for record in all_players:
-            print(record)
+            # Assuming the PlayerCurrency model has an 'email' attribute
+            print("Record:", record, "Email:", getattr(record, "email", "No email attribute"))
         
         # Query for the specific player using the decoded email
         player = session.query(PlayerCurrency).filter(PlayerCurrency.email == decoded_email).first()
@@ -94,6 +95,7 @@ def get_slaskecoins(email: str) -> int:
         return player.slaskecoins if player else 0
     finally:
         session.close()
+
 
 
 
