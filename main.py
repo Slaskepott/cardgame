@@ -8,6 +8,66 @@ import math
 import stripe
 import os
 
+from sqlalchemy import create_engine, Column, String, Integer
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+# Replace with your actual credentials and DB name
+DATABASE_URL = f"postgresql://slaskecards:{os.environ.get("db_pw")}@dpg-cuu6h3qj1k6c738je0j0-a:5432/slaskecards"
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+class PlayerCurrency(Base):
+    __tablename__ = "player_currencies"
+    email = Column(String, primary_key=True, index=True)
+    slaskecoins = Column(Integer, default=0)
+
+# Create the table if it doesn't exist yet
+Base.metadata.create_all(bind=engine)
+
+def addOrRemoveSlaskecoins(email: str, amount: int) -> int:
+    """
+    Adds (or subtracts, if amount is negative) slaskecoins for the given email.
+    If the user doesn't exist, they are created with an initial balance of 0.
+    Returns the new balance.
+    """
+    session = SessionLocal()
+    try:
+        # Find the user by email
+        player = session.query(PlayerCurrency).filter(PlayerCurrency.email == email).first()
+        if not player:
+            # Create new user entry if not found
+            player = PlayerCurrency(email=email, slaskecoins=0)
+            session.add(player)
+        # Update coin balance
+        player.slaskecoins += amount
+        # Optional: prevent negative balances
+        if player.slaskecoins < 0:
+            player.slaskecoins = 0
+        session.commit()
+        return player.slaskecoins
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+def getSlaskecoins(email: str) -> int:
+    """
+    Retrieves the current number of slaskecoins for the given email.
+    If the user does not exist, returns 0.
+    """
+    session = SessionLocal()
+    try:
+        player = session.query(PlayerCurrency).filter(PlayerCurrency.email == email).first()
+        return player.slaskecoins if player else 0
+    finally:
+        session.close()
+
+
 stripe.api_key = os.environ.get("stripe_api_key")
 
 
