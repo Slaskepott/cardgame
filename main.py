@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
 from typing import Dict
@@ -23,15 +23,17 @@ app.add_middleware(
 )
 
 @app.post("/pay")
-def create_payment(amount: int, currency: str = "usd", description: str = "Payment from FastAPI"):
+def create_payment(
+    amount: int = Body(...),
+    currency: str = Body("usd"),
+    description: str = Body("Payment from FastAPI")
+):
     try:
-        # Note: amount should be provided in the smallest currency unit (e.g., cents for USD)
         payment_intent = stripe.PaymentIntent.create(
             amount=amount,
             currency=currency,
             description=description,
         )
-        # Return the client secret to the frontend
         return {"client_secret": payment_intent.client_secret}
     except Exception as e:
         return {"error": str(e)}
