@@ -7,6 +7,7 @@ import random
 import math
 import stripe
 import os
+import urllib.parse
 
 from sqlalchemy import create_engine, Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
@@ -64,26 +65,36 @@ stripe.api_key = os.environ.get("stripe_api_key")
 
 app = FastAPI()
 
+import urllib.parse
+from fastapi import FastAPI
+
+app = FastAPI()
+
 @app.get("/slaskecoins/{email}")
 def get_slaskecoins(email: str) -> int:
+    # Decode the email in case it's percent-encoded
+    decoded_email = urllib.parse.unquote(email)
+    print("Decoded email:", decoded_email)
+    
     session = SessionLocal()
     try:
-        # Print all records from the PlayerCurrency table
+        # Print the entire database records
         all_players = session.query(PlayerCurrency).all()
         print("Entire database:")
         for record in all_players:
             print(record)
         
-        # Query for the specific player by email
-        player = session.query(PlayerCurrency).filter(PlayerCurrency.email == email).first()
+        # Query for the specific player using the decoded email
+        player = session.query(PlayerCurrency).filter(PlayerCurrency.email == decoded_email).first()
         
-        # Print the session object and the result of the query
+        # Print the session object and the queried player
         print("Session object:", session)
         print("Queried player:", player)
         
         return player.slaskecoins if player else 0
     finally:
         session.close()
+
 
 
 # Enable CORS
