@@ -13,7 +13,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Replace with your actual credentials and DB name
-DATABASE_URL = f"postgresql://slaskecards:{os.environ.get("db_pw")}@dpg-cuu6h3qj1k6c738je0j0-a:5432/slaskecards"
+DATABASE_URL = f"postgresql://slaskecards:{os.environ.get('db_pw')}@dpg-cuu6h3qj1k6c738je0j0-a:5432/slaskecards"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
