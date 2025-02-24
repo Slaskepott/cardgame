@@ -113,7 +113,7 @@ def create_payment(
     amount: int = Body(...),
     currency: str = Body("usd"),
     description: str = Body("Payment from FastAPI"),
-    email: str = ""
+    email: str = Body(...),
 ):
     try:
         payment_intent = stripe.PaymentIntent.create(
