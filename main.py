@@ -121,7 +121,7 @@ def create_payment(
             currency=currency,
             description=description,
         )
-        addOrRemoveSlaskecoins(email, amount)
+        addOrRemoveSlaskecoins(email, 1000)
         return {"client_secret": payment_intent.client_secret}
     except Exception as e:
         return {"error": str(e)}
