@@ -22,6 +22,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.post("/pay")
+def create_payment(amount: int, currency: str = "usd", description: str = "Payment from FastAPI"):
+    try:
+        # Note: amount should be provided in the smallest currency unit (e.g., cents for USD)
+        payment_intent = stripe.PaymentIntent.create(
+            amount=amount,
+            currency=currency,
+            description=description,
+        )
+        # Return the client secret to the frontend
+        return {"client_secret": payment_intent.client_secret}
+    except Exception as e:
+        return {"error": str(e)}
+
 games: Dict[str, dict] = {}
 
 @app.get("/game/{game_id}/players")
