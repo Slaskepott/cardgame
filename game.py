@@ -214,7 +214,7 @@ class Game:
             hand_type = "high card"
 
         multiplier = multipliers[hand_type]
-        base_damage = sum(base_values) // 5
+        base_damage = sum(base_values) // len(base_values)
         total_damage = base_damage * multiplier
 
         return total_damage, hand_type, multiplier
