@@ -1,23 +1,40 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
-from uuid import uuid4
 from typing import Dict
 from game import Game
 import random
-import math
 import stripe
 import os
 import urllib.parse
 
 from sqlalchemy import create_engine, Column, String, Integer
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Replace with your actual credentials and DB name
-DATABASE_URL = f"postgresql://slaskecards:{os.environ.get('db_pw')}@dpg-cuu6h3qj1k6c738je0j0-a.frankfurt-postgres.render.com/slaskecards"
+
+def get_database_url() -> str:
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        # SQLAlchemy expects the canonical scheme even if a provider gives postgres://
+        return database_url.replace("postgres://", "postgresql://", 1)
+
+    legacy_password = os.environ.get("db_pw")
+    if legacy_password:
+        return (
+            "postgresql://"
+            f"slaskecards:{legacy_password}"
+            "@dpg-cuu6h3qj1k6c738je0j0-a.frankfurt-postgres.render.com/slaskecards"
+            "?sslmode=require"
+        )
+
+    raise RuntimeError("DATABASE_URL environment variable is required.")
 
 
-engine = create_engine(DATABASE_URL)
+DATABASE_URL = get_database_url()
+
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -26,9 +43,6 @@ class PlayerCurrency(Base):
     __tablename__ = "player_currencies"
     email = Column(String, primary_key=True, index=True)
     slaskecoins = Column(Integer, default=0)
-
-# Create the table if it doesn't exist yet
-Base.metadata.create_all(bind=engine)
 
 def addOrRemoveSlaskecoins(email: str, amount: int) -> int:
     """
@@ -63,12 +77,13 @@ def addOrRemoveSlaskecoins(email: str, amount: int) -> int:
 stripe.api_key = os.environ.get("stripe_api_key")
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
 
-import urllib.parse
-from fastapi import FastAPI
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/slaskecoins/{email}")
 def get_slaskecoins(email: str) -> int:

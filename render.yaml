@@ -16,10 +16,10 @@ services:
   repo: https://github.com/Slaskepott/cardgame
   plan: starter
   envVars:
-  - key: db_pw
+  - key: DATABASE_URL
     fromDatabase:
       name: slaskecards
-      property: password
+      property: connectionString
   - key: stripe_api_key
     sync: false
   region: oregon
