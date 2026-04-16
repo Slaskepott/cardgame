@@ -143,6 +143,19 @@ def create_payment(
 
 games: Dict[str, dict] = {}
 
+@app.get("/games")
+def list_games():
+    return {
+        "games": [
+            {
+                "game_id": game_id,
+                "player_count": len(game.players),
+                "players": list(game.players.keys()),
+            }
+            for game_id, game in games.items()
+        ]
+    }
+
 @app.get("/game/{game_id}/players")
 def get_players(game_id: str):
     if game_id not in games:
