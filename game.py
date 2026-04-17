@@ -20,6 +20,18 @@ class Game:
         if player_name not in self.players:
             self.players[player_name] = Player(player_name)
 
+    def remove_player(self, player_name: str):
+        if player_name not in self.players:
+            return
+
+        del self.players[player_name]
+        self.websocket_connections.pop(player_name, None)
+
+        if self.players:
+            self.turn_index %= len(self.players)
+        else:
+            self.turn_index = 0
+
     def get_price(self, upgrade_id):
         return self.upgrade_store.get_price_by_id(upgrade_id)
 

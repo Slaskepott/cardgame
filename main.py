@@ -188,6 +188,35 @@ async def join_game(game_id: str, player_id: str):
 
     return {"message": f"{player_id} joined game {game_id}"}
 
+@app.post("/game/{game_id}/leave")
+async def leave_game(game_id: str, player_id: str):
+    if game_id not in games:
+        return {"error": "Game not found"}
+
+    game = games[game_id]
+    if player_id not in game.players:
+        return {"error": "Player not found"}
+
+    game.remove_player(player_id)
+
+    if not game.players:
+        del games[game_id]
+        return {"message": f"{player_id} left and game {game_id} was deleted"}
+
+    await game.broadcast({
+        "type": "players_updated",
+        "players": list(game.players.keys())
+    })
+
+    remaining_players = list(game.players.keys())
+    next_player = remaining_players[game.turn_index] if remaining_players else None
+
+    return {
+        "message": f"{player_id} left game {game_id}",
+        "players": remaining_players,
+        "next_player": next_player
+    }
+
 @app.websocket("/game/{game_id}/ws/{player_id}")
 async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     if game_id not in games:
@@ -232,7 +261,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     except WebSocketDisconnect:
         print(f"WebSocket disconnected: {player_id}")
     finally:
-        del game.websocket_connections[player_id]
+        game.websocket_connections.pop(player_id, None)
 
 @app.post("/game/{game_id}/discard")
 async def discard(game_id: str, request: dict):
