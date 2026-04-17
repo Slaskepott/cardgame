@@ -7,10 +7,18 @@ import random
 import stripe
 import os
 import urllib.parse
+import json
 
-from sqlalchemy import create_engine, Column, String, Integer
+from sqlalchemy import create_engine, Column, String, Integer, Text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
+from meta_progression import (
+    build_meta_snapshot,
+    can_unlock_talent,
+    compute_talent_bonuses,
+    default_stats,
+    evaluate_achievements,
+)
 
 
 def get_database_url() -> str:
@@ -43,6 +51,103 @@ class PlayerCurrency(Base):
     __tablename__ = "player_currencies"
     email = Column(String, primary_key=True, index=True)
     slaskecoins = Column(Integer, default=0)
+
+
+class PlayerProgression(Base):
+    __tablename__ = "player_progressions"
+    email = Column(String, primary_key=True, index=True)
+    stats_json = Column(Text, default="{}")
+    achievements_json = Column(Text, default="[]")
+    talents_json = Column(Text, default="[]")
+
+
+def decode_email(email: str) -> str:
+    return urllib.parse.unquote(email).strip()
+
+
+def load_json_blob(raw_value: str | None, fallback):
+    if not raw_value:
+        return fallback
+    try:
+        return json.loads(raw_value)
+    except json.JSONDecodeError:
+        return fallback
+
+
+def get_or_create_progress(session, email: str) -> PlayerProgression:
+    progression = (
+        session.query(PlayerProgression)
+        .filter(PlayerProgression.email == email)
+        .first()
+    )
+    if progression:
+        return progression
+
+    progression = PlayerProgression(
+        email=email,
+        stats_json=json.dumps(default_stats()),
+        achievements_json="[]",
+        talents_json="[]",
+    )
+    session.add(progression)
+    session.flush()
+    return progression
+
+
+def read_progress_state(progression: PlayerProgression):
+    stats = load_json_blob(progression.stats_json, default_stats())
+    achievements = load_json_blob(progression.achievements_json, [])
+    talents = load_json_blob(progression.talents_json, [])
+    return stats, achievements, talents
+
+
+def save_progress_state(progression: PlayerProgression, stats: dict, achievements: list[str], talents: list[str]):
+    progression.stats_json = json.dumps(stats)
+    progression.achievements_json = json.dumps(sorted(set(achievements)))
+    progression.talents_json = json.dumps(sorted(set(talents)))
+
+
+def build_progress_snapshot(progression: PlayerProgression) -> dict:
+    stats, achievements, talents = read_progress_state(progression)
+    return build_meta_snapshot(stats, achievements, talents)
+
+
+def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
+    normalized_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, normalized_email)
+        stats, achievements, talents = read_progress_state(progression)
+        for key, amount in stat_changes.items():
+            stats[key] = int(stats.get(key, 0)) + int(amount)
+        achievements = evaluate_achievements(stats, achievements)
+        save_progress_state(progression, stats, achievements, talents)
+        session.commit()
+        session.refresh(progression)
+        return build_progress_snapshot(progression)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def get_player_talent_bonuses(email: str | None) -> dict:
+    if not email:
+        return {}
+
+    normalized_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, normalized_email)
+        _, _, talents = read_progress_state(progression)
+        session.commit()
+        return compute_talent_bonuses(talents)
+    except Exception:
+        session.rollback()
+        return {}
+    finally:
+        session.close()
 
 def addOrRemoveSlaskecoins(email: str, amount: int) -> int:
     """
@@ -88,7 +193,7 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/slaskecoins/{email}")
 def get_slaskecoins(email: str) -> int:
     # Decode the email in case it's percent-encoded
-    decoded_email = urllib.parse.unquote(email)
+    decoded_email = decode_email(email)
     print("Decoded email:", decoded_email)
     
     session = SessionLocal()
@@ -108,6 +213,43 @@ def get_slaskecoins(email: str) -> int:
         print("Queried player:", player)
         
         return player.slaskecoins if player else 0
+    finally:
+        session.close()
+
+
+@app.get("/meta/{email}")
+def get_meta_progress(email: str):
+    decoded_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, decoded_email)
+        session.commit()
+        session.refresh(progression)
+        return build_progress_snapshot(progression)
+    finally:
+        session.close()
+
+
+@app.post("/meta/{email}/talents/{talent_id}")
+def unlock_talent(email: str, talent_id: str):
+    decoded_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, decoded_email)
+        stats, achievements, talents = read_progress_state(progression)
+        can_unlock, error = can_unlock_talent(talent_id, achievements, talents)
+        if not can_unlock:
+            return {"error": error or "Unable to unlock talent"}
+
+        talents = sorted(set(talents + [talent_id]))
+        achievements = evaluate_achievements(stats, achievements)
+        save_progress_state(progression, stats, achievements, talents)
+        session.commit()
+        session.refresh(progression)
+        return build_progress_snapshot(progression)
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 
@@ -143,6 +285,26 @@ def create_payment(
 
 games: Dict[str, dict] = {}
 
+
+def summarize_played_hand(cards: list[dict], hand_type: str) -> dict[str, int]:
+    stat_changes: dict[str, int] = {
+        "hands_played": 1,
+    }
+
+    if hand_type == "straight flush":
+        stat_changes["straight_flushes_played"] = 1
+    if hand_type == "royal flush":
+        stat_changes["royal_flushes_played"] = 1
+        stat_changes["straight_flushes_played"] = 1
+
+    if "flush" in hand_type and cards:
+        suits = {card["suit"] for card in cards}
+        if len(suits) == 1:
+            flush_suit = next(iter(suits)).lower()
+            stat_changes[f"{flush_suit}_flushes"] = 1
+
+    return stat_changes
+
 @app.get("/games")
 def list_games():
     return {
@@ -175,12 +337,17 @@ def create_game(game_id: str):
     return {"message": f"Game {game_id} created successfully"}
 
 @app.post("/game/join/{game_id}")
-async def join_game(game_id: str, player_id: str):
+async def join_game(game_id: str, player_id: str, email: str | None = None):
     if game_id not in games:
         return {"error": "Game not found"}
 
     game = games[game_id]
-    game.add_player(player_id)
+    decoded_email = decode_email(email) if email else None
+    game.add_player(
+        player_id,
+        account_email=decoded_email,
+        talent_bonuses=get_player_talent_bonuses(decoded_email),
+    )
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
 
@@ -312,6 +479,12 @@ async def discard(game_id: str, request: dict):
     }
     await game.broadcast(hand_message)
 
+    if player.account_email:
+        update_player_progress(
+            player.account_email,
+            {"cards_discarded": len(result["discarded"])},
+        )
+
     return {
         "message": "Cards discarded and new ones drawn",
         "discarded": result["discarded"],
@@ -347,6 +520,8 @@ async def play_hand(game_id: str, request: dict):
 
     # Calculate damage
     damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
+    stat_changes = summarize_played_hand(selected_cards, hand_type)
+    stat_changes["damage_dealt"] = damage
 
     # Remove played cards
     result = game.remove_selected_cards(player_id, selected_cards)
@@ -361,6 +536,7 @@ async def play_hand(game_id: str, request: dict):
     if opponent.health == 0:
         winner = player_id
         player.wins += 1
+        stat_changes["games_won"] = 1
         await game.reset_game()
 
     #Increase discards
@@ -387,6 +563,9 @@ async def play_hand(game_id: str, request: dict):
         "remaining_discards": player.remaining_discards,
         "gold": multiplier #placeholder
     })
+
+    if player.account_email:
+        update_player_progress(player.account_email, stat_changes)
 
     return {
         "message": f"{player_id} played a hand",
@@ -437,6 +616,8 @@ async def add_upgrade(gameId: str, playerId: str, upgrade_id: str):
     async with game.lock:
         await game.add_upgrade(playerId, upgrade_id)
         await game.apply_upgrades(playerId)
+        if player.account_email:
+            update_player_progress(player.account_email, {"upgrades_bought": 1})
         return {
             "message":f"{playerId} bought upgrade {upgrade_id}",
             "price":price

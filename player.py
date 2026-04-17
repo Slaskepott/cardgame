@@ -3,8 +3,10 @@ from card import Card
 from upgrades import Upgrade
 
 class Player:
-    def __init__(self, name: str):
+    def __init__(self, name: str, account_email: str | None = None, talent_bonuses: dict | None = None):
         self.name = name
+        self.account_email = account_email
+        self.talent_bonuses = talent_bonuses or {}
         self.max_health = 100
         self.health = self.max_health
         self.wins = 0
@@ -20,6 +22,7 @@ class Player:
         self.earth_damage_modifier = 1.0
         self.low_card_damage_modifier = 1.0
         self.high_card_damage_modifier = 1.0
+        self.apply_upgrades()
 
     def reset(self):
         """Resets player for a new round but keeps wins."""
@@ -31,16 +34,16 @@ class Player:
         # Reset base values
         self.max_health = 100
         self.max_discards = 1
-        self.damage_modifier = 1.0
-        self.water_damage_modifier = 1.0
-        self.fire_damage_modifier = 1.0
-        self.air_damage_modifier = 1.0
-        self.earth_damage_modifier = 1.0
+        self.damage_modifier = 1.0 + (self.talent_bonuses.get("damage_pct", 0) / 100.0)
+        self.water_damage_modifier = 1.0 + (self.talent_bonuses.get("water_damage_pct", 0) / 100.0)
+        self.fire_damage_modifier = 1.0 + (self.talent_bonuses.get("fire_damage_pct", 0) / 100.0)
+        self.air_damage_modifier = 1.0 + (self.talent_bonuses.get("air_damage_pct", 0) / 100.0)
+        self.earth_damage_modifier = 1.0 + (self.talent_bonuses.get("earth_damage_pct", 0) / 100.0)
         self.low_card_damage_modifier = 1.0
         self.high_card_damage_modifier = 1.0
 
         # Apply upgrades
-        health_percentage_bonus = 1.0
+        health_percentage_bonus = 1.0 + (self.talent_bonuses.get("health_pct", 0) / 100.0)
         for upgrade in self.upgrades:
             print(f"Upgrade name: {upgrade.name}")
             if upgrade.name == "Increase Health":
