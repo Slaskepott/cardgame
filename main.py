@@ -161,7 +161,10 @@ def get_players(game_id: str):
     if game_id not in games:
         return {"error": "Game not found"}
     
-    return {"players": list(games[game_id].players.keys())}
+    game = games[game_id]
+    players = list(game.players.keys())
+    next_player = players[game.turn_index] if players else None
+    return {"players": players, "next_player": next_player}
 
 @app.post("/game/create/{game_id}")
 def create_game(game_id: str):
@@ -183,7 +186,8 @@ async def join_game(game_id: str, player_id: str):
 
     await game.broadcast({
         "type": "players_updated",
-        "players": list(game.players.keys())
+        "players": list(game.players.keys()),
+        "next_player": list(game.players.keys())[game.turn_index] if game.players else None,
     })
 
     return {"message": f"{player_id} joined game {game_id}"}
@@ -271,6 +275,9 @@ async def discard(game_id: str, request: dict):
         return {"error": "Game not found"}
 
     game = games[game_id]
+    if len(game.players) < 2:
+        return {"error": "Waiting for another player"}
+
     player_id = request.get("player_id")
     selected_cards = request.get("cards", [])
 
@@ -318,6 +325,9 @@ async def play_hand(game_id: str, request: dict):
         return {"error": "Game not found"}
 
     game = games[game_id]
+    if len(game.players) < 2:
+        return {"error": "Waiting for another player"}
+
     player_id = request.get("player_id")
     selected_cards = request.get("cards", [])
 
@@ -392,6 +402,8 @@ async def end_turn(game_id: str, player_id: str):
         return {"error": "Game not found"}
     
     game = games[game_id]
+    if len(game.players) < 2:
+        return {"error": "Waiting for another player"}
 
     async with game.lock:
         player_keys = list(game.players.keys())
