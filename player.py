@@ -22,6 +22,7 @@ class Player:
         self.earth_damage_modifier = 1.0
         self.low_card_damage_modifier = 1.0
         self.high_card_damage_modifier = 1.0
+        self.damage_taken_multiplier = 1.0
         self.apply_upgrades()
 
     def reset(self):
@@ -39,11 +40,16 @@ class Player:
         self.fire_damage_modifier = 1.0 + (self.talent_bonuses.get("fire_damage_pct", 0) / 100.0)
         self.air_damage_modifier = 1.0 + (self.talent_bonuses.get("air_damage_pct", 0) / 100.0)
         self.earth_damage_modifier = 1.0 + (self.talent_bonuses.get("earth_damage_pct", 0) / 100.0)
-        self.low_card_damage_modifier = 1.0
-        self.high_card_damage_modifier = 1.0
+        self.low_card_damage_modifier = 1.0 + (self.talent_bonuses.get("low_card_damage_pct", 0) / 100.0)
+        self.high_card_damage_modifier = 1.0 + (self.talent_bonuses.get("high_card_damage_pct", 0) / 100.0)
+        self.damage_taken_multiplier = max(
+            0.1,
+            1.0 + (self.talent_bonuses.get("damage_taken_pct", 0) / 100.0),
+        )
 
         # Apply upgrades
         health_percentage_bonus = 1.0 + (self.talent_bonuses.get("health_pct", 0) / 100.0)
+        self.max_discards += int(self.talent_bonuses.get("max_discards_flat", 0))
         for upgrade in self.upgrades:
             print(f"Upgrade name: {upgrade.name}")
             if upgrade.name == "Increase Health":

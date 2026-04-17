@@ -17,7 +17,10 @@ from meta_progression import (
     can_unlock_talent,
     compute_talent_bonuses,
     default_stats,
+    decode_talent_state,
+    encode_talent_state,
     evaluate_achievements,
+    get_talent_definition,
 )
 
 
@@ -97,19 +100,26 @@ def get_or_create_progress(session, email: str) -> PlayerProgression:
 def read_progress_state(progression: PlayerProgression):
     stats = load_json_blob(progression.stats_json, default_stats())
     achievements = load_json_blob(progression.achievements_json, [])
-    talents = load_json_blob(progression.talents_json, [])
-    return stats, achievements, talents
+    talents_state = load_json_blob(progression.talents_json, [])
+    talents, specialization = decode_talent_state(talents_state)
+    return stats, achievements, talents, specialization
 
 
-def save_progress_state(progression: PlayerProgression, stats: dict, achievements: list[str], talents: list[str]):
+def save_progress_state(
+    progression: PlayerProgression,
+    stats: dict,
+    achievements: list[str],
+    talents: list[str],
+    specialization: str | None,
+):
     progression.stats_json = json.dumps(stats)
     progression.achievements_json = json.dumps(sorted(set(achievements)))
-    progression.talents_json = json.dumps(sorted(set(talents)))
+    progression.talents_json = json.dumps(encode_talent_state(talents, specialization))
 
 
 def build_progress_snapshot(progression: PlayerProgression) -> dict:
-    stats, achievements, talents = read_progress_state(progression)
-    return build_meta_snapshot(stats, achievements, talents)
+    stats, achievements, talents, specialization = read_progress_state(progression)
+    return build_meta_snapshot(stats, achievements, talents, specialization)
 
 
 def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
@@ -117,11 +127,11 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        stats, achievements, talents = read_progress_state(progression)
+        stats, achievements, talents, specialization = read_progress_state(progression)
         for key, amount in stat_changes.items():
             stats[key] = int(stats.get(key, 0)) + int(amount)
         achievements = evaluate_achievements(stats, achievements)
-        save_progress_state(progression, stats, achievements, talents)
+        save_progress_state(progression, stats, achievements, talents, specialization)
         session.commit()
         session.refresh(progression)
         return build_progress_snapshot(progression)
@@ -140,7 +150,7 @@ def get_player_talent_bonuses(email: str | None) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        _, _, talents = read_progress_state(progression)
+        _, _, talents, _ = read_progress_state(progression)
         session.commit()
         return compute_talent_bonuses(talents)
     except Exception:
@@ -236,14 +246,17 @@ def unlock_talent(email: str, talent_id: str):
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, decoded_email)
-        stats, achievements, talents = read_progress_state(progression)
-        can_unlock, error = can_unlock_talent(talent_id, achievements, talents)
+        stats, achievements, talents, specialization = read_progress_state(progression)
+        can_unlock, error = can_unlock_talent(talent_id, achievements, talents, specialization)
         if not can_unlock:
             return {"error": error or "Unable to unlock talent"}
 
+        if not specialization:
+            talent_definition = get_talent_definition(talent_id)
+            specialization = talent_definition["specialization"] if talent_definition else None
         talents = sorted(set(talents + [talent_id]))
         achievements = evaluate_achievements(stats, achievements)
-        save_progress_state(progression, stats, achievements, talents)
+        save_progress_state(progression, stats, achievements, talents, specialization)
         session.commit()
         session.refresh(progression)
         return build_progress_snapshot(progression)
@@ -520,8 +533,9 @@ async def play_hand(game_id: str, request: dict):
 
     # Calculate damage
     damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
+    actual_damage = max(0, int(round(damage * opponent.damage_taken_multiplier)))
     stat_changes = summarize_played_hand(selected_cards, hand_type)
-    stat_changes["damage_dealt"] = damage
+    stat_changes["damage_dealt"] = actual_damage
 
     # Remove played cards
     result = game.remove_selected_cards(player_id, selected_cards)
@@ -529,7 +543,7 @@ async def play_hand(game_id: str, request: dict):
         return result
 
     # Apply damage to opponent
-    opponent.health = max(0, opponent.health - damage)
+    opponent.health = max(0, opponent.health - actual_damage)
 
     # Check for win condition
     winner = None
@@ -551,7 +565,7 @@ async def play_hand(game_id: str, request: dict):
         "type": "hand_played",
         "player": player_id,
         "cards": selected_cards,
-        "damage": damage,
+        "damage": actual_damage,
         "health_update": {p.name: p.health for p in game.players.values()},
         "max_health_update": {p.name: p.max_health for p in game.players.values()},
         "score_update": {p.name: p.wins for p in game.players.values()},
@@ -569,7 +583,7 @@ async def play_hand(game_id: str, request: dict):
 
     return {
         "message": f"{player_id} played a hand",
-        "damage": damage,
+        "damage": actual_damage,
         "multiplier": multiplier,
         "new_hand": result["new_hand"],  # ✅ Send updated hand
         "winner": winner
