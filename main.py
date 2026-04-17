@@ -205,7 +205,8 @@ async def leave_game(game_id: str, player_id: str):
 
     await game.broadcast({
         "type": "players_updated",
-        "players": list(game.players.keys())
+        "players": list(game.players.keys()),
+        "next_player": list(game.players.keys())[game.turn_index],
     })
 
     remaining_players = list(game.players.keys())
@@ -249,7 +250,8 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     hand_message = {
         "type": "new_hand",
         "player": player_id,
-        "cards": [{"rank": c.rank, "suit": c.suit} for c in player.hand]
+        "cards": [{"rank": c.rank, "suit": c.suit} for c in player.hand],
+        "next_player": list(game.players.keys())[game.turn_index],
     }
     await websocket.send_json(hand_message)
     print(f"Sent hand to {player_id} via WebSocket: {player.hand}")
