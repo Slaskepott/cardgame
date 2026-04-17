@@ -18,6 +18,8 @@ class Player:
         self.fire_damage_modifier = 1.0
         self.air_damage_modifier = 1.0
         self.earth_damage_modifier = 1.0
+        self.low_card_damage_modifier = 1.0
+        self.high_card_damage_modifier = 1.0
 
     def reset(self):
         """Resets player for a new round but keeps wins."""
@@ -34,6 +36,8 @@ class Player:
         self.fire_damage_modifier = 1.0
         self.air_damage_modifier = 1.0
         self.earth_damage_modifier = 1.0
+        self.low_card_damage_modifier = 1.0
+        self.high_card_damage_modifier = 1.0
 
         # Apply upgrades
         health_percentage_bonus = 1.0
@@ -48,6 +52,10 @@ class Player:
                 self.max_discards += int(upgrade.effect.split()[0])
             elif upgrade.name == "Increase Damage":
                 self.damage_modifier += int(upgrade.effect.split('%')[0]) / 100.0
+            elif upgrade.name == "Low Cards Specialist":
+                self.low_card_damage_modifier += int(upgrade.effect.split('%')[0]) / 100.0
+            elif upgrade.name == "High Cards Specialist":
+                self.high_card_damage_modifier += int(upgrade.effect.split('%')[0]) / 100.0
             elif "Increase" in upgrade.name and "Damage" in upgrade.name:
                 element = upgrade.name.split()[1]  # Extracts Earth, Fire, Water, or Air
                 modifier_name = f"{element.lower()}_damage_modifier"

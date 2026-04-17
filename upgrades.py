@@ -69,7 +69,6 @@ class UpgradeStore:
         self.add_upgrade(11, "Increase Damage", 3, "epic", "+30% Damage", 18)
         self.add_upgrade(12, "Increase Damage", 4, "legendary", "+50% Damage", 24)
 
-
         # Elemental Damage (Earth, Fire, Water, Air)
         elements = ["Earth", "Fire", "Water", "Air"]
         id_counter = 13  # Start IDs after the previous upgrades
@@ -80,6 +79,28 @@ class UpgradeStore:
             id_counter += 1
             self.add_upgrade(id_counter, f"Increase {element} Damage", 3, "epic", f"+60% {element} Damage", 10)
             id_counter += 1
+
+        # Card rank specialists
+        self.add_upgrade(id_counter, "High Cards Specialist", 1, "common", "+5% High Card Damage", 5)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Cards Specialist", 2, "uncommon", "+10% High Card Damage", 8)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Cards Specialist", 3, "rare", "+20% High Card Damage", 13)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Cards Specialist", 4, "epic", "+40% High Card Damage", 19)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Cards Specialist", 5, "legendary", "+60% High Card Damage", 26)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "Low Cards Specialist", 1, "common", "+10% Low Card Damage", 6)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Cards Specialist", 2, "uncommon", "+20% Low Card Damage", 10)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Cards Specialist", 3, "rare", "+40% Low Card Damage", 16)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Cards Specialist", 4, "epic", "+80% Low Card Damage", 24)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Cards Specialist", 5, "legendary", "+120% Low Card Damage", 34)
 
 
     def add_upgrade(self, id, name, tier, rarity, effect, cost):

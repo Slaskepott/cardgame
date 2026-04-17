@@ -186,9 +186,16 @@ class Game:
             rank_counts[rank] = rank_counts.get(rank, 0) + 1
             suit_counts[suit] = suit_counts.get(suit, 0) + 1
             ranks.append(rank)
-            base_values.append(rank * modifier_dict[suit])
-            if modifier_dict[suit] > 1.0:
-                print(f"Applied {modifier_dict[suit]} modifier to {suit} {rank} card")
+            rank_modifier = 1.0
+            if rank <= 7:
+                rank_modifier *= player.low_card_damage_modifier
+            elif rank >= 10:
+                rank_modifier *= player.high_card_damage_modifier
+
+            total_modifier = modifier_dict[suit] * player.damage_modifier * rank_modifier
+            base_values.append(rank * total_modifier)
+            if total_modifier > 1.0:
+                print(f"Applied {total_modifier} modifier to {suit} {rank} card")
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)
         is_flush = (max(suit_counts.values()) == len(cards)) and len(cards) >= 5
