@@ -339,7 +339,8 @@ def get_players(game_id: str):
     game = games[game_id]
     players = list(game.players.keys())
     next_player = players[game.turn_index] if players else None
-    return {"players": players, "next_player": next_player}
+    avatars = {player.name: player.avatar for player in game.players.values()}
+    return {"players": players, "next_player": next_player, "avatars": avatars}
 
 @app.post("/game/create/{game_id}")
 def create_game(game_id: str):
@@ -350,7 +351,12 @@ def create_game(game_id: str):
     return {"message": f"Game {game_id} created successfully"}
 
 @app.post("/game/join/{game_id}")
-async def join_game(game_id: str, player_id: str, email: str | None = None):
+async def join_game(
+    game_id: str,
+    player_id: str,
+    email: str | None = None,
+    avatar: str | None = None,
+):
     if game_id not in games:
         return {"error": "Game not found"}
 
@@ -360,6 +366,7 @@ async def join_game(game_id: str, player_id: str, email: str | None = None):
         player_id,
         account_email=decoded_email,
         talent_bonuses=get_player_talent_bonuses(decoded_email),
+        avatar=avatar,
     )
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
@@ -368,6 +375,7 @@ async def join_game(game_id: str, player_id: str, email: str | None = None):
         "type": "players_updated",
         "players": list(game.players.keys()),
         "next_player": list(game.players.keys())[game.turn_index] if game.players else None,
+        "avatars": {player.name: player.avatar for player in game.players.values()},
     })
 
     return {"message": f"{player_id} joined game {game_id}"}
@@ -391,6 +399,7 @@ async def leave_game(game_id: str, player_id: str):
         "type": "players_updated",
         "players": list(game.players.keys()),
         "next_player": list(game.players.keys())[game.turn_index],
+        "avatars": {player.name: player.avatar for player in game.players.values()},
     })
 
     remaining_players = list(game.players.keys())

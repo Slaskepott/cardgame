@@ -3,9 +3,16 @@ from card import Card
 from upgrades import Upgrade
 
 class Player:
-    def __init__(self, name: str, account_email: str | None = None, talent_bonuses: dict | None = None):
+    def __init__(
+        self,
+        name: str,
+        account_email: str | None = None,
+        talent_bonuses: dict | None = None,
+        avatar: str | None = None,
+    ):
         self.name = name
         self.account_email = account_email
+        self.avatar = avatar or "👤"
         self.talent_bonuses = talent_bonuses or {}
         self.max_health = 100
         self.health = self.max_health

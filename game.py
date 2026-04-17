@@ -16,12 +16,19 @@ class Game:
         self.deck = self.generate_deck()
         self.upgrade_store = UpgradeStore()
 
-    def add_player(self, player_name: str, account_email: str | None = None, talent_bonuses: dict | None = None):
+    def add_player(
+        self,
+        player_name: str,
+        account_email: str | None = None,
+        talent_bonuses: dict | None = None,
+        avatar: str | None = None,
+    ):
         if player_name not in self.players:
             self.players[player_name] = Player(
                 player_name,
                 account_email=account_email,
                 talent_bonuses=talent_bonuses,
+                avatar=avatar,
             )
             return
 
@@ -29,7 +36,9 @@ class Game:
         if account_email:
             player.account_email = account_email
             player.talent_bonuses = talent_bonuses or {}
-            player.apply_upgrades()
+        if avatar:
+            player.avatar = avatar
+        player.apply_upgrades()
 
     def remove_player(self, player_name: str):
         if player_name not in self.players:
