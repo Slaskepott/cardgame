@@ -13,6 +13,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from meta_progression import (
     build_meta_snapshot,
+    calculate_experience_gain,
     can_unlock_talent,
     compute_talent_bonuses,
     default_stats,
@@ -20,6 +21,8 @@ from meta_progression import (
     encode_talent_state,
     evaluate_achievements,
     get_talent_definition,
+    level_from_experience,
+    unlocked_level_reward_ids,
 )
 
 
@@ -127,9 +130,13 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
     try:
         progression = get_or_create_progress(session, normalized_email)
         stats, achievements, talent_ranks, specialization = read_progress_state(progression)
+        previous_achievements = list(achievements)
         for key, amount in stat_changes.items():
             stats[key] = int(stats.get(key, 0)) + int(amount)
         achievements = evaluate_achievements(stats, achievements)
+        experience_gain = calculate_experience_gain(stat_changes, previous_achievements, achievements)
+        if experience_gain > 0:
+            stats["experience_total"] = int(stats.get("experience_total", 0)) + experience_gain
         save_progress_state(progression, stats, achievements, talent_ranks, specialization)
         session.commit()
         session.refresh(progression)
@@ -155,6 +162,37 @@ def get_player_talent_bonuses(email: str | None) -> dict:
     except Exception:
         session.rollback()
         return {}
+    finally:
+        session.close()
+
+
+def get_player_account_state(email: str | None) -> dict:
+    if not email:
+        return {
+            "talent_bonuses": {},
+            "level": 1,
+            "level_rewards": [],
+        }
+
+    normalized_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, normalized_email)
+        stats, _, talent_ranks, _ = read_progress_state(progression)
+        level = level_from_experience(int(stats.get("experience_total", 0)))
+        session.commit()
+        return {
+            "talent_bonuses": compute_talent_bonuses(talent_ranks),
+            "level": level,
+            "level_rewards": unlocked_level_reward_ids(level),
+        }
+    except Exception:
+        session.rollback()
+        return {
+            "talent_bonuses": {},
+            "level": 1,
+            "level_rewards": [],
+        }
     finally:
         session.close()
 
@@ -372,11 +410,13 @@ async def join_game(
 
     game = games[game_id]
     decoded_email = decode_email(email) if email else None
+    account_state = get_player_account_state(decoded_email)
     game.add_player(
         player_id,
         account_email=decoded_email,
-        talent_bonuses=get_player_talent_bonuses(decoded_email),
+        talent_bonuses=account_state["talent_bonuses"],
         avatar=avatar,
+        level_unlocks=account_state["level_rewards"],
     )
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
@@ -607,6 +647,8 @@ async def play_hand(game_id: str, request: dict):
 
     if player.account_email:
         update_player_progress(player.account_email, stat_changes)
+    if winner and opponent.account_email:
+        update_player_progress(opponent.account_email, {"games_lost": 1})
 
     return {
         "message": f"{player_id} played a hand",

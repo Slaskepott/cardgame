@@ -21,6 +21,33 @@ SPECIALIZATIONS = [
     },
 ]
 
+LEVEL_MILESTONE_DEFINITIONS = [
+    {
+        "id": "joker",
+        "level": 5,
+        "name": "The Joker",
+        "description": "Adds a wild Joker to your round pool. It can stand in for any card you have unlocked.",
+    },
+    {
+        "id": "flame",
+        "level": 10,
+        "name": "The Flame",
+        "description": "Adds The Flame to your round pool. It counts as any Fire card.",
+    },
+    {
+        "id": "fifteen",
+        "level": 15,
+        "name": "15",
+        "description": "Adds rank-15 cards in each classic element. They simply hit harder than aces.",
+    },
+    {
+        "id": "plasma",
+        "level": 20,
+        "name": "Plasma",
+        "description": "Unlocks the Plasma element and adds a full Plasma suit to your round pool.",
+    },
+]
+
 
 ACHIEVEMENT_DEFINITIONS = [
     {"id": "hands_25", "name": "Warm-Up Duelist", "description": "Play 25 hands.", "stat": "hands_played", "target": 25, "points": 1},
@@ -44,6 +71,19 @@ ACHIEVEMENT_DEFINITIONS = [
     {"id": "royal_flush_1", "name": "Crowned By Chaos", "description": "Play a royal flush.", "stat": "royal_flushes_played", "target": 1, "points": 3},
     {"id": "upgrades_25", "name": "Greedy Between Rounds", "description": "Buy 25 upgrades.", "stat": "upgrades_bought", "target": 25, "points": 1},
 ]
+
+
+EXPERIENCE_REWARDS = {
+    "hands_played": 12,
+    "games_won": 80,
+    "games_lost": 35,
+}
+
+ACHIEVEMENT_XP_BY_POINTS = {
+    1: 60,
+    2: 130,
+    3: 240,
+}
 
 
 TALENT_DEFINITIONS = [
@@ -464,6 +504,7 @@ TALENT_DEFINITIONS = [
 DEFAULT_STATS = {
     "hands_played": 0,
     "games_won": 0,
+    "games_lost": 0,
     "damage_dealt": 0,
     "cards_discarded": 0,
     "full_hand_of_a_kind_draws": 0,
@@ -474,6 +515,7 @@ DEFAULT_STATS = {
     "straight_flushes_played": 0,
     "royal_flushes_played": 0,
     "upgrades_bought": 0,
+    "experience_total": 0,
 }
 
 
@@ -490,6 +532,68 @@ def normalize_stats(stats: dict | None) -> dict:
         value = stats.get(key, 0)
         normalized[key] = int(value) if isinstance(value, (int, float)) else 0
     return normalized
+
+
+def experience_for_level(level: int) -> int:
+    if level <= 1:
+        return 0
+
+    total = 0
+    for current_level in range(1, level):
+        total += 100 + ((current_level - 1) * 35)
+    return total
+
+
+def level_from_experience(experience_total: int) -> int:
+    level = 1
+    while experience_total >= experience_for_level(level + 1):
+        level += 1
+    return level
+
+
+def level_progress(experience_total: int) -> tuple[int, int, int]:
+    level = level_from_experience(experience_total)
+    current_level_floor = experience_for_level(level)
+    next_level_floor = experience_for_level(level + 1)
+    into_level = max(0, experience_total - current_level_floor)
+    needed = max(1, next_level_floor - current_level_floor)
+    return level, into_level, needed
+
+
+def unlocked_level_reward_ids(level: int) -> list[str]:
+    return [
+        milestone["id"]
+        for milestone in LEVEL_MILESTONE_DEFINITIONS
+        if level >= int(milestone["level"])
+    ]
+
+
+def build_level_milestones(level: int) -> list[dict]:
+    return [
+        {
+            **milestone,
+            "unlocked": level >= int(milestone["level"]),
+        }
+        for milestone in LEVEL_MILESTONE_DEFINITIONS
+    ]
+
+
+def calculate_experience_gain(
+    stat_changes: dict[str, int],
+    previous_achievements: list[str] | None,
+    updated_achievements: list[str] | None,
+) -> int:
+    experience = 0
+
+    for stat_key, per_point in EXPERIENCE_REWARDS.items():
+        experience += int(stat_changes.get(stat_key, 0)) * per_point
+
+    previous_ids = set(previous_achievements or [])
+    for definition in ACHIEVEMENT_DEFINITIONS:
+        if definition["id"] in set(updated_achievements or []) and definition["id"] not in previous_ids:
+            experience += ACHIEVEMENT_XP_BY_POINTS.get(int(definition["points"]), 0)
+
+    return experience
 
 
 def evaluate_achievements(stats: dict, unlocked_ids: list[str] | None) -> list[str]:
@@ -627,6 +731,8 @@ def build_meta_snapshot(
     achievement_ids = set(unlocked_achievements or [])
     talent_ranks = talent_ranks or {}
     current_points = available_talent_points(list(achievement_ids), talent_ranks)
+    experience_total = int(normalized_stats.get("experience_total", 0))
+    level, experience_in_level, experience_for_next_level = level_progress(experience_total)
 
     achievements = []
     for definition in ACHIEVEMENT_DEFINITIONS:
@@ -666,6 +772,10 @@ def build_meta_snapshot(
         })
 
     return {
+        "level": level,
+        "experience_total": experience_total,
+        "experience_in_level": experience_in_level,
+        "experience_for_next_level": experience_for_next_level,
         "achievement_points": total_achievement_points(list(achievement_ids)),
         "available_talent_points": current_points,
         "stats": normalized_stats,
@@ -675,4 +785,6 @@ def build_meta_snapshot(
         "specializations": SPECIALIZATIONS,
         "selected_specialization": selected_specialization,
         "talent_bonuses": compute_talent_bonuses(talent_ranks),
+        "level_milestones": build_level_milestones(level),
+        "unlocked_level_rewards": unlocked_level_reward_ids(level),
     }

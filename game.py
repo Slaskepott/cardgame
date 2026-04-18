@@ -1,11 +1,47 @@
-from card import Card
-from typing import Dict, List
-from player import Player
-from fastapi import WebSocket
 import asyncio
 import random
-from upgrades import UpgradeStore
 import traceback
+from itertools import product
+from typing import Dict, List
+
+from fastapi import WebSocket
+
+from card import Card
+from player import Player
+from upgrades import UpgradeStore
+
+
+BASE_RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+CLASSIC_SUITS = ["Fire", "Air", "Earth", "Water"]
+RANK_VALUES = {
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
+    "J": 11,
+    "Q": 12,
+    "K": 13,
+    "A": 14,
+    "15": 15,
+}
+HAND_MULTIPLIERS = {
+    "high card": 1,
+    "pair": 2,
+    "two pair": 2,
+    "three of a kind": 3,
+    "straight": 4,
+    "flush": 4,
+    "full house": 4,
+    "four of a kind": 7,
+    "straight flush": 8,
+    "royal flush": 10,
+}
+
 
 class Game:
     def __init__(self):
@@ -22,6 +58,7 @@ class Game:
         account_email: str | None = None,
         talent_bonuses: dict | None = None,
         avatar: str | None = None,
+        level_unlocks: list[str] | None = None,
     ):
         if player_name not in self.players:
             self.players[player_name] = Player(
@@ -29,6 +66,7 @@ class Game:
                 account_email=account_email,
                 talent_bonuses=talent_bonuses,
                 avatar=avatar,
+                level_unlocks=level_unlocks,
             )
             return
 
@@ -38,7 +76,10 @@ class Game:
             player.talent_bonuses = talent_bonuses or {}
         if avatar:
             player.avatar = avatar
+        if level_unlocks is not None:
+            player.level_unlocks = list(level_unlocks)
         player.apply_upgrades()
+        player.special_deck = player.build_special_deck()
 
     def remove_player(self, player_name: str):
         if player_name not in self.players:
@@ -56,34 +97,30 @@ class Game:
         return self.upgrade_store.get_price_by_id(upgrade_id)
 
     async def reset_game(self):
-        """Resets all players but keeps scores."""
         self.deck = self.generate_deck()
         for player in self.players.values():
             player.reset()
-        
+
         self.turn_index = 0
         await self.open_upgrade_store()
 
-
     async def open_upgrade_store(self):
-        """Send each player a unique selection of upgrades."""
         for player_id, ws in self.websocket_connections.items():
             try:
                 store_selection = self.upgrade_store.get_selection_of_upgrades()
                 serialized_upgrades = [upgrade.to_dict() for upgrade in store_selection]
-                
+
                 await ws.send_json({
                     "type": "open_store",
                     "player": player_id,
-                    "upgrades": serialized_upgrades
+                    "upgrades": serialized_upgrades,
                 })
-            except Exception as e:
-                print(f"Failed to send store selection to {player_id}: {e}")
+            except Exception as error:
+                print(f"Failed to send store selection to {player_id}: {error}")
                 traceback.print_exc()
-    
-    async def apply_upgrades(self,playerId):
-        await self.broadcast(self.players[playerId].apply_upgrades())
 
+    async def apply_upgrades(self, player_id):
+        await self.broadcast(self.players[player_id].apply_upgrades())
 
     async def broadcast(self, message: dict):
         disconnected_players = []
@@ -93,117 +130,104 @@ class Game:
             except Exception:
                 disconnected_players.append(player)
 
-        # Remove disconnected players
         for player in disconnected_players:
             del self.websocket_connections[player]
-    
-    async def add_upgrade(self, playerId, upgradeId):
-        player = self.players[playerId]
-        player.upgrades.append(self.upgrade_store.get_upgrade_by_id(upgradeId))
-        print(f"Added upgrade {upgradeId} to player {playerId}")
-    
+
+    async def add_upgrade(self, player_id, upgrade_id):
+        player = self.players[player_id]
+        player.upgrades.append(self.upgrade_store.get_upgrade_by_id(upgrade_id))
+        print(f"Added upgrade {upgrade_id} to player {player_id}")
+
     def deal_card(self, player_id: str):
-        """Draws a random card for a player."""
         if player_id not in self.players:
             return {"error": "Player not found"}
 
         player = self.players[player_id]
-
-        if not self.deck:
+        if not self.deck and not player.special_deck:
             self.deck = self.generate_deck()
+            player.special_deck = player.build_special_deck()
 
-        weights = [player.get_draw_weight(card) for card in self.deck]
-        selected_index = random.choices(range(len(self.deck)), weights=weights, k=1)[0]
-        card = self.deck.pop(selected_index)
+        combined_pool = self.deck + player.special_deck
+        if not combined_pool:
+            return {"error": "No cards available"}
+
+        weights = [player.get_draw_weight(card) for card in combined_pool]
+        selected_index = random.choices(range(len(combined_pool)), weights=weights, k=1)[0]
+
+        if selected_index < len(self.deck):
+            card = self.deck.pop(selected_index)
+        else:
+            card = player.special_deck.pop(selected_index - len(self.deck))
+
         player.hand.append(card)
         return card
 
-
     def remove_selected_cards(self, player_id: str, selected_cards: List[dict]) -> dict:
-        """Removes selected cards from player's hand and returns discarded cards."""
         if player_id not in self.players:
             return {"error": "Player not found"}
 
         player = self.players[player_id]
-
         if not player.hand:
             return {"error": "Player has no hand"}
 
-        # Convert selected_cards to a set of (rank, suit) tuples for comparison
         selected_card_tuples = {(card["rank"], card["suit"]) for card in selected_cards}
-
-        print(f"Selected: {selected_card_tuples}")
-        print(f"Player {player_id} Hand Before: {[{'rank': c.rank, 'suit': c.suit} for c in player.hand]}")
-
-        # Remove selected cards from player's hand
         new_hand = [card for card in player.hand if (card.rank, card.suit) not in selected_card_tuples]
         discarded_cards = [card for card in player.hand if (card.rank, card.suit) in selected_card_tuples]
 
-        if len(new_hand) == len(player.hand):  # No valid cards were removed
+        if len(new_hand) == len(player.hand):
             return {"error": "Selected cards not found in hand"}
 
         player.hand = new_hand
-
-        # Draw new cards to maintain hand size (if possible)
-        while len(player.hand) < player.hand_size and self.deck:
-            self.deal_card(player_id)
+        while len(player.hand) < player.hand_size:
+            dealt = self.deal_card(player_id)
+            if isinstance(dealt, dict) and dealt.get("error"):
+                break
 
         return {
-            "discarded": [{"rank": c.rank, "suit": c.suit} for c in discarded_cards],
-            "new_hand": [{"rank": c.rank, "suit": c.suit} for c in player.hand]
+            "discarded": self.serialize_cards(discarded_cards),
+            "new_hand": self.serialize_cards(player.hand),
         }
-    
+
     def generate_deck(self):
-        ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
-        suits = ["Fire", "Air", "Earth", "Water"]
-        return [Card(rank, suit) for rank in ranks for suit in suits] * 10
+        return [Card(rank, suit) for rank in BASE_RANKS for suit in CLASSIC_SUITS] * 10
 
-    def calculate_damage(self, cards, player_id):
-        """Evaluates a hand and returns damage and hand type based on poker multipliers."""
-        multipliers = {
-            "high card": 1,
-            "pair": 2,
-            "two pair": 2,
-            "three of a kind": 3,
-            "straight": 4,
-            "flush": 4,
-            "full house": 4,
-            "four of a kind": 7,
-            "straight flush": 8,
-            "royal flush": 10
-        }
-        rank_dict = {
-            "2": 2,
-            "3": 3,
-            "4": 4,
-            "5": 5,
-            "6": 6,
-            "7": 7,
-            "8": 8,
-            "9": 9,
-            "10": 10,
-            "J": 11,
-            "Q": 12,
-            "K": 13,
-            "A": 14
-        }
+    def serialize_cards(self, cards: list[Card]) -> list[dict]:
+        return [{"rank": card.rank, "suit": card.suit} for card in cards]
 
+    def resolve_card_variants(self, player: Player, card: dict) -> list[dict]:
+        rank = card["rank"]
+        suit = card["suit"]
 
+        if rank == "Joker" or suit == "Wild":
+            return [
+                {"rank": candidate_rank, "suit": candidate_suit}
+                for candidate_suit in player.get_available_suits()
+                for candidate_rank in player.get_available_ranks()
+            ]
+
+        if rank == "Flame":
+            return [
+                {"rank": candidate_rank, "suit": "Fire"}
+                for candidate_rank in player.get_available_ranks()
+            ]
+
+        return [card]
+
+    def evaluate_concrete_hand(self, cards: list[dict], player: Player) -> tuple[int, str, int]:
         rank_counts = {}
         suit_counts = {}
         ranks = []
         base_values = []
-        player = self.players[player_id]
         modifier_dict = {
             "Water": player.water_damage_modifier,
             "Fire": player.fire_damage_modifier,
             "Air": player.air_damage_modifier,
-            "Earth": player.earth_damage_modifier
+            "Earth": player.earth_damage_modifier,
+            "Plasma": player.plasma_damage_modifier,
         }
-        
-        
+
         for card in cards:
-            rank = rank_dict[card["rank"]]
+            rank = RANK_VALUES[card["rank"]]
             suit = card["suit"]
             rank_counts[rank] = rank_counts.get(rank, 0) + 1
             suit_counts[suit] = suit_counts.get(suit, 0) + 1
@@ -214,29 +238,29 @@ class Game:
             elif rank >= 10:
                 rank_modifier *= player.high_card_damage_modifier
 
-            total_modifier = modifier_dict[suit] * player.damage_modifier * rank_modifier
+            total_modifier = modifier_dict.get(suit, 1.0) * player.damage_modifier * rank_modifier
             base_values.append(rank * total_modifier)
-            if total_modifier > 1.0:
-                print(f"Applied {total_modifier} modifier to {suit} {rank} card")
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)
-        is_flush = (max(suit_counts.values()) == len(cards)) and len(cards) >= 5
-        sorted_ranks = sorted(ranks)
-        sorted_ranks = sorted(set(ranks))  # Remove duplicates and sort
+        is_flush = len(cards) >= 5 and max(suit_counts.values()) == len(cards)
+        sorted_ranks = sorted(set(ranks))
         is_straight = False
 
         if len(sorted_ranks) >= 5:
-            for i in range(len(sorted_ranks) - 4):
-                if sorted_ranks[i + 4] - sorted_ranks[i] == 4:  # Consecutive check
+            for index in range(len(sorted_ranks) - 4):
+                window = sorted_ranks[index:index + 5]
+                if window[-1] - window[0] == 4 and len(window) == 5:
                     is_straight = True
                     break
 
-            # Ace-low straight check (A, 2, 3, 4, 5)
             if sorted_ranks[-5:] == [2, 3, 4, 5, 14]:
                 is_straight = True
 
-        if is_straight and is_flush:
-            hand_type = "royal flush" if max(ranks) == 14 else "straight flush"
+        is_royal = is_flush and {10, 11, 12, 13, 14}.issubset(set(ranks))
+        if is_royal:
+            hand_type = "royal flush"
+        elif is_straight and is_flush:
+            hand_type = "straight flush"
         elif 4 in rank_frequencies:
             hand_type = "four of a kind"
         elif 3 in rank_frequencies and 2 in rank_frequencies:
@@ -254,7 +278,7 @@ class Game:
         else:
             hand_type = "high card"
 
-        multiplier = multipliers[hand_type]
+        multiplier = HAND_MULTIPLIERS[hand_type]
         hand_type_modifier = 1.0
         if hand_type in {"pair", "two pair"}:
             hand_type_modifier *= player.pair_damage_modifier
@@ -265,7 +289,26 @@ class Game:
         if hand_type in {"three of a kind", "full house"}:
             hand_type_modifier *= player.full_house_damage_modifier
 
-        base_damage = sum(base_values) // len(base_values)
+        base_damage = sum(base_values) // max(1, len(base_values))
         total_damage = int(round(base_damage * multiplier * hand_type_modifier))
-
         return total_damage, hand_type, multiplier
+
+    def calculate_damage(self, cards, player_id):
+        player = self.players[player_id]
+        variants_per_card = [self.resolve_card_variants(player, card) for card in cards]
+        best_result = None
+        best_score = None
+
+        for resolved_cards in product(*variants_per_card):
+            resolved_list = list(resolved_cards)
+            total_damage, hand_type, multiplier = self.evaluate_concrete_hand(resolved_list, player)
+            rank_total = sum(RANK_VALUES[card["rank"]] for card in resolved_list)
+            score = (total_damage, multiplier, rank_total)
+            if best_score is None or score > best_score:
+                best_score = score
+                best_result = (total_damage, hand_type, multiplier)
+
+        if best_result is None:
+            return 0, "high card", 1
+
+        return best_result
