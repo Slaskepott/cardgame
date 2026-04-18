@@ -456,6 +456,7 @@ async def leave_game(game_id: str, player_id: str):
         "next_player": list(game.players.keys())[game.turn_index],
         "avatars": {player.name: player.avatar for player in game.players.values()},
     })
+    await game.broadcast_shop_status()
 
     remaining_players = list(game.players.keys())
     next_player = remaining_players[game.turn_index] if remaining_players else None
@@ -707,6 +708,22 @@ async def add_upgrade(gameId: str, playerId: str, upgrade_id: str):
         if player.account_email:
             update_player_progress(player.account_email, {"upgrades_bought": 1})
         return {
-            "message":f"{playerId} bought upgrade {upgrade_id}",
-            "price":price
+            "message": f"{playerId} bought upgrade {upgrade_id}",
+            "price": price,
         }
+
+
+@app.post("/game/{game_id}/shop/continue")
+async def continue_from_shop(game_id: str, player_id: str):
+    if game_id not in games:
+        return {"error": "Game not found"}
+
+    game = games[game_id]
+    if player_id not in game.players:
+        return {"error": "Player not found"}
+
+    await game.mark_shop_ready(player_id)
+    return {
+        "message": f"{player_id} is ready",
+        "waiting_players": game.get_shop_waiting_players(),
+    }

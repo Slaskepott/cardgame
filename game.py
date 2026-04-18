@@ -48,6 +48,7 @@ class Game:
         self.players: Dict[str, Player] = {}
         self.turn_index: int = 0
         self.websocket_connections: Dict[str, WebSocket] = {}
+        self.shop_waiting_players: set[str] = set()
         self.lock = asyncio.Lock()
         self.deck = self.generate_deck()
         self.upgrade_store = UpgradeStore()
@@ -91,6 +92,7 @@ class Game:
 
         del self.players[player_name]
         self.websocket_connections.pop(player_name, None)
+        self.shop_waiting_players.discard(player_name)
 
         if self.players:
             self.turn_index %= len(self.players)
@@ -108,7 +110,21 @@ class Game:
         self.turn_index = 0
         await self.open_upgrade_store()
 
+    def get_shop_waiting_players(self) -> list[str]:
+        return [player_name for player_name in self.players.keys() if player_name in self.shop_waiting_players]
+
+    async def broadcast_shop_status(self):
+        await self.broadcast({
+            "type": "shop_status",
+            "waiting_players": self.get_shop_waiting_players(),
+        })
+
+    async def mark_shop_ready(self, player_id: str):
+        self.shop_waiting_players.discard(player_id)
+        await self.broadcast_shop_status()
+
     async def open_upgrade_store(self):
+        self.shop_waiting_players = set(self.players.keys())
         for player_id, ws in self.websocket_connections.items():
             try:
                 store_selection = self.upgrade_store.get_selection_of_upgrades()
@@ -118,10 +134,13 @@ class Game:
                     "type": "open_store",
                     "player": player_id,
                     "upgrades": serialized_upgrades,
+                    "waiting_players": self.get_shop_waiting_players(),
                 })
             except Exception as error:
                 print(f"Failed to send store selection to {player_id}: {error}")
                 traceback.print_exc()
+
+        await self.broadcast_shop_status()
 
     async def apply_upgrades(self, player_id):
         await self.broadcast(self.players[player_id].apply_upgrades())
