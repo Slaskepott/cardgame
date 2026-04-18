@@ -206,11 +206,13 @@ def update_match_progress(
 
         winner_delta = calculate_elo_delta(winner_rating, loser_rating, 1.0)
         loser_delta = calculate_elo_delta(loser_rating, winner_rating, 0.0)
+        winner_after_rating = max(100, winner_rating + winner_delta)
+        loser_after_rating = max(100, loser_rating + loser_delta)
 
         if winner_progress:
             for key, amount in winner_stat_changes.items():
                 winner_stats[key] = int(winner_stats.get(key, 0)) + int(amount)
-            winner_stats["elo_rating"] = max(100, winner_rating + winner_delta)
+            winner_stats["elo_rating"] = winner_after_rating
             winner_achievements = evaluate_achievements(winner_stats, winner_achievements)
             winner_xp_gain = calculate_experience_gain(
                 winner_stat_changes,
@@ -230,7 +232,7 @@ def update_match_progress(
         if loser_progress:
             for key, amount in loser_stat_changes.items():
                 loser_stats[key] = int(loser_stats.get(key, 0)) + int(amount)
-            loser_stats["elo_rating"] = max(100, loser_rating + loser_delta)
+            loser_stats["elo_rating"] = loser_after_rating
             loser_achievements = evaluate_achievements(loser_stats, loser_achievements)
             loser_xp_gain = calculate_experience_gain(
                 loser_stat_changes,
@@ -257,8 +259,18 @@ def update_match_progress(
             loser_snapshot = build_progress_snapshot(loser_progress)
 
         return {
-            "winner": winner_snapshot,
-            "loser": loser_snapshot,
+            "winner": {
+                "snapshot": winner_snapshot,
+                "elo_before": winner_rating if winner_progress else None,
+                "elo_after": winner_after_rating if winner_progress else None,
+                "elo_delta": winner_delta if winner_progress else None,
+            },
+            "loser": {
+                "snapshot": loser_snapshot,
+                "elo_before": loser_rating if loser_progress else None,
+                "elo_after": loser_after_rating if loser_progress else None,
+                "elo_delta": loser_delta if loser_progress else None,
+            },
         }
     except Exception:
         session.rollback()
@@ -317,6 +329,73 @@ def get_player_account_state(email: str | None) -> dict:
         }
     finally:
         session.close()
+
+
+async def finalize_match(
+    game_id: str,
+    winner_id: str,
+    loser_id: str | None,
+    reason: str,
+    winner_stat_changes: dict[str, int] | None = None,
+    loser_stat_changes: dict[str, int] | None = None,
+) -> dict:
+    game = games[game_id]
+    game.set_match_over(winner_id, reason)
+
+    winner_player = game.players.get(winner_id)
+    loser_player = game.players.get(loser_id) if loser_id else None
+    progress_result = update_match_progress(
+        winner_player.account_email if winner_player else None,
+        loser_player.account_email if loser_player else None,
+        winner_stat_changes or {"games_won": 1},
+        loser_stat_changes or {"games_lost": 1},
+    )
+
+    elo_changes = {}
+    for player_id, role in ((winner_id, "winner"), (loser_id, "loser")):
+        if not player_id:
+            continue
+        role_payload = progress_result.get(role) if progress_result else None
+        elo_changes[player_id] = {
+            "before": role_payload.get("elo_before") if role_payload else None,
+            "after": role_payload.get("elo_after") if role_payload else None,
+            "delta": role_payload.get("elo_delta") if role_payload else None,
+        }
+
+    await game.broadcast({
+        "type": "match_over",
+        "winner": winner_id,
+        "loser": loser_id,
+        "reason": reason,
+        "scores": {player.name: player.wins for player in game.players.values()},
+        "avatars": {player.name: player.avatar for player in game.players.values()},
+        "elo_changes": elo_changes,
+    })
+    await game.broadcast_match_state()
+
+    return {
+        "winner": winner_id,
+        "loser": loser_id,
+        "reason": reason,
+        "elo_changes": elo_changes,
+    }
+
+
+async def resolve_game_state(game_id: str) -> dict | None:
+    if game_id not in games:
+        return None
+
+    game = games[game_id]
+    resolution = game.resolve_timeout_or_inactivity()
+    if not resolution:
+        return None
+
+    return await finalize_match(
+        game_id,
+        resolution["winner"],
+        resolution.get("loser"),
+        resolution["reason"],
+    )
 
 def addOrRemoveSlaskecoins(email: str, amount: int) -> int:
     """
@@ -510,7 +589,14 @@ def get_players(game_id: str):
     players = list(game.players.keys())
     next_player = players[game.turn_index] if players else None
     avatars = {player.name: player.avatar for player in game.players.values()}
-    return {"players": players, "next_player": next_player, "avatars": avatars}
+    return {
+        "players": players,
+        "next_player": next_player,
+        "avatars": avatars,
+        "phase": game.phase,
+        "battle_deadline_at": game.battle_deadline_at,
+        "shop_deadlines": dict(game.shop_deadlines),
+    }
 
 @app.post("/game/create/{game_id}")
 def create_game(game_id: str):
@@ -544,12 +630,16 @@ async def join_game(
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
 
+    if len(game.players) >= 2 and game.phase == "waiting":
+        game.start_battle_phase()
+
     await game.broadcast({
         "type": "players_updated",
         "players": list(game.players.keys()),
         "next_player": list(game.players.keys())[game.turn_index] if game.players else None,
         "avatars": {player.name: player.avatar for player in game.players.values()},
     })
+    await game.broadcast_match_state()
 
     return {"message": f"{player_id} joined game {game_id}"}
 
@@ -575,6 +665,7 @@ async def leave_game(game_id: str, player_id: str):
         "avatars": {player.name: player.avatar for player in game.players.values()},
     })
     await game.broadcast_shop_status()
+    await game.broadcast_match_state()
 
     remaining_players = list(game.players.keys())
     next_player = remaining_players[game.turn_index] if remaining_players else None
@@ -621,6 +712,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         "next_player": list(game.players.keys())[game.turn_index],
     }
     await websocket.send_json(hand_message)
+    await websocket.send_json(game.serialize_match_state())
     print(f"Sent hand to {player_id} via WebSocket: {player.hand}")
 
     if player.account_email:
@@ -638,6 +730,24 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     finally:
         game.websocket_connections.pop(player_id, None)
 
+
+@app.post("/game/{game_id}/heartbeat/{player_id}")
+async def heartbeat(game_id: str, player_id: str):
+    if game_id not in games:
+        return {"error": "Game not found"}
+
+    game = games[game_id]
+    if player_id not in game.players:
+        return {"error": "Player not found"}
+
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    return {
+        "message": "Heartbeat received",
+        "phase": game.phase,
+        "resolved": resolution is not None,
+    }
+
 @app.post("/game/{game_id}/discard")
 async def discard(game_id: str, request: dict):
     if game_id not in games:
@@ -649,6 +759,13 @@ async def discard(game_id: str, request: dict):
 
     player_id = request.get("player_id")
     selected_cards = request.get("cards", [])
+
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "battle":
+        return {"error": "Round is not active"}
 
     if player_id not in game.players:
         return {"error": "Player not found"}
@@ -707,6 +824,13 @@ async def play_hand(game_id: str, request: dict):
     player_id = request.get("player_id")
     selected_cards = request.get("cards", [])
 
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "battle":
+        return {"error": "Round is not active"}
+
     if player_id not in game.players:
         return {"error": "Player not found"}
 
@@ -738,17 +862,22 @@ async def play_hand(game_id: str, request: dict):
 
     # Check for win condition
     winner = None
+    match_finished = False
     if opponent.health == 0:
         winner = player_id
         player.wins += 1
-        stat_changes["games_won"] = 1
-        await game.reset_game()
+        if player.wins >= 5:
+            match_finished = True
+        else:
+            await game.reset_game()
 
     #Increase discards
     player.remaining_discards = player.max_discards
 
     # Move turn
-    game.turn_index = (game.turn_index + 1) % len(game.players)
+    if not winner:
+        game.turn_index = (game.turn_index + 1) % len(game.players)
+        game.start_battle_phase()
     player.gold += multiplier + player.gold_gain_flat
 
     # Broadcast update
@@ -768,15 +897,19 @@ async def play_hand(game_id: str, request: dict):
         "remaining_discards": player.remaining_discards,
         "gold": multiplier + player.gold_gain_flat
     })
-
-    if winner:
-        update_match_progress(
-            player.account_email,
-            opponent.account_email,
-            stat_changes,
+    if not winner:
+        await game.broadcast_match_state()
+    elif match_finished:
+        await finalize_match(
+            game_id,
+            player_id,
+            opponent_id,
+            f"{player_id} reached 5 wins.",
+            {**stat_changes, "games_won": 1},
             {"games_lost": 1},
         )
-    elif player.account_email:
+
+    if not winner and player.account_email:
         update_player_progress(player.account_email, stat_changes)
 
     return {
@@ -796,6 +929,13 @@ async def end_turn(game_id: str, player_id: str):
     if len(game.players) < 2:
         return {"error": "Waiting for another player"}
 
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "battle":
+        return {"error": "Round is not active"}
+
     async with game.lock:
         player_keys = list(game.players.keys())
 
@@ -805,9 +945,11 @@ async def end_turn(game_id: str, player_id: str):
         # Move to the next player
         game.turn_index = (game.turn_index + 1) % len(player_keys)
         next_player = player_keys[game.turn_index]
+        game.start_battle_phase()
 
         # Broadcast turn update
         await game.broadcast({"message": "Turn ended", "next_player": next_player})
+        await game.broadcast_match_state()
 
         return {"message": "Turn ended", "next_player": next_player}
 
@@ -817,6 +959,12 @@ async def add_upgrade(gameId: str, playerId: str, upgrade_id: str):
     if gameId not in games:
         return {"error": "Game not found"}
     game = games[gameId]
+    game.record_activity(playerId)
+    resolution = await resolve_game_state(gameId)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "shop":
+        return {"error": "Shop is not open"}
     price = game.get_price(upgrade_id)
     player = game.players[playerId]
     print(f"Type of price: {type(price)} and player.gold {type(player.gold)}")
@@ -844,6 +992,13 @@ async def continue_from_shop(game_id: str, player_id: str):
     game = games[game_id]
     if player_id not in game.players:
         return {"error": "Player not found"}
+
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "shop":
+        return {"error": "Shop is not open"}
 
     await game.mark_shop_ready(player_id)
     return {

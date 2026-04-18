@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 import traceback
 from itertools import product
 from typing import Dict, List
@@ -49,6 +50,12 @@ class Game:
         self.turn_index: int = 0
         self.websocket_connections: Dict[str, WebSocket] = {}
         self.shop_waiting_players: set[str] = set()
+        self.shop_deadlines: dict[str, float] = {}
+        self.last_activity: dict[str, float] = {}
+        self.phase: str = "waiting"
+        self.battle_deadline_at: float | None = None
+        self.match_winner: str | None = None
+        self.match_end_reason: str | None = None
         self.lock = asyncio.Lock()
         self.deck = self.generate_deck()
         self.upgrade_store = UpgradeStore()
@@ -71,6 +78,7 @@ class Game:
                 level_unlocks=level_unlocks,
                 level_reward_bonuses=level_reward_bonuses,
             )
+            self.last_activity[player_name] = time.time()
             return
 
         player = self.players[player_name]
@@ -85,6 +93,7 @@ class Game:
             player.level_reward_bonuses = dict(level_reward_bonuses)
         player.apply_upgrades()
         player.special_deck = player.build_special_deck()
+        self.last_activity[player_name] = time.time()
 
     def remove_player(self, player_name: str):
         if player_name not in self.players:
@@ -93,11 +102,125 @@ class Game:
         del self.players[player_name]
         self.websocket_connections.pop(player_name, None)
         self.shop_waiting_players.discard(player_name)
+        self.shop_deadlines.pop(player_name, None)
+        self.last_activity.pop(player_name, None)
 
         if self.players:
             self.turn_index %= len(self.players)
         else:
             self.turn_index = 0
+            self.phase = "waiting"
+            self.battle_deadline_at = None
+
+    def get_current_player_id(self) -> str | None:
+        if not self.players:
+            return None
+        player_ids = list(self.players.keys())
+        return player_ids[self.turn_index % len(player_ids)]
+
+    def get_opponent_id(self, player_id: str) -> str | None:
+        for candidate in self.players.keys():
+            if candidate != player_id:
+                return candidate
+        return None
+
+    def record_activity(self, player_id: str):
+        if player_id in self.players:
+            self.last_activity[player_id] = time.time()
+
+    def start_waiting_phase(self):
+        self.phase = "waiting"
+        self.battle_deadline_at = None
+        self.shop_waiting_players = set()
+        self.shop_deadlines = {}
+
+    def start_battle_phase(self):
+        if len(self.players) < 2:
+            self.start_waiting_phase()
+            return
+
+        self.phase = "battle"
+        self.battle_deadline_at = time.time() + 60
+        self.shop_waiting_players = set()
+        self.shop_deadlines = {}
+
+    def start_shop_phase(self):
+        if len(self.players) < 2:
+            self.start_waiting_phase()
+            return
+
+        self.phase = "shop"
+        self.battle_deadline_at = None
+        deadline = time.time() + 120
+        self.shop_waiting_players = set(self.players.keys())
+        self.shop_deadlines = {player_name: deadline for player_name in self.players.keys()}
+
+    def set_match_over(self, winner_id: str, reason: str):
+        self.phase = "match_over"
+        self.match_winner = winner_id
+        self.match_end_reason = reason
+        self.battle_deadline_at = None
+        self.shop_waiting_players = set()
+        self.shop_deadlines = {}
+
+    def serialize_match_state(self) -> dict:
+        return {
+            "type": "match_state",
+            "phase": self.phase,
+            "current_turn": self.get_current_player_id(),
+            "battle_deadline_at": self.battle_deadline_at,
+            "shop_deadlines": dict(self.shop_deadlines),
+            "waiting_players": self.get_shop_waiting_players(),
+            "wins_to_clinch": 5,
+            "best_of": 9,
+            "match_winner": self.match_winner,
+            "match_end_reason": self.match_end_reason,
+        }
+
+    async def broadcast_match_state(self):
+        await self.broadcast(self.serialize_match_state())
+
+    def resolve_timeout_or_inactivity(self) -> dict | None:
+        if self.phase == "match_over" or len(self.players) < 2:
+            return None
+
+        now = time.time()
+
+        for player_name, last_seen in list(self.last_activity.items()):
+            if player_name not in self.players:
+                continue
+            if now - last_seen >= 120:
+                opponent_id = self.get_opponent_id(player_name)
+                if opponent_id:
+                    return {
+                        "winner": opponent_id,
+                        "loser": player_name,
+                        "reason": f"{player_name} went inactive.",
+                    }
+
+        if self.phase == "battle" and self.battle_deadline_at and now >= self.battle_deadline_at:
+            timed_out_player = self.get_current_player_id()
+            opponent_id = self.get_opponent_id(timed_out_player) if timed_out_player else None
+            if timed_out_player and opponent_id:
+                return {
+                    "winner": opponent_id,
+                    "loser": timed_out_player,
+                    "reason": f"{timed_out_player} ran out of time on their turn.",
+                }
+
+        if self.phase == "shop":
+            for player_name in self.get_shop_waiting_players():
+                deadline = self.shop_deadlines.get(player_name)
+                if deadline and now >= deadline:
+                    opponent_id = self.get_opponent_id(player_name)
+                    if opponent_id:
+                        return {
+                            "winner": opponent_id,
+                            "loser": player_name,
+                            "reason": f"{player_name} ran out of time in the shop.",
+                        }
+
+        return None
 
     def get_price(self, upgrade_id):
         return self.upgrade_store.get_price_by_id(upgrade_id)
@@ -121,10 +244,14 @@ class Game:
 
     async def mark_shop_ready(self, player_id: str):
         self.shop_waiting_players.discard(player_id)
+        self.shop_deadlines.pop(player_id, None)
         await self.broadcast_shop_status()
+        if not self.shop_waiting_players:
+            self.start_battle_phase()
+            await self.broadcast_match_state()
 
     async def open_upgrade_store(self):
-        self.shop_waiting_players = set(self.players.keys())
+        self.start_shop_phase()
         for player_id, ws in self.websocket_connections.items():
             try:
                 store_selection = self.upgrade_store.get_selection_of_upgrades()
@@ -141,6 +268,7 @@ class Game:
                 traceback.print_exc()
 
         await self.broadcast_shop_status()
+        await self.broadcast_match_state()
 
     async def apply_upgrades(self, player_id):
         await self.broadcast(self.players[player_id].apply_upgrades())
