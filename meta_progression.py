@@ -606,6 +606,7 @@ DEFAULT_STATS = {
     "royal_flushes_played": 0,
     "upgrades_bought": 0,
     "experience_total": 0,
+    "elo_rating": 1000,
 }
 
 
@@ -904,6 +905,7 @@ def build_meta_snapshot(
 
     return {
         "level": level,
+        "elo_rating": int(normalized_stats.get("elo_rating", 1000)),
         "experience_total": experience_total,
         "experience_in_level": experience_in_level,
         "experience_for_next_level": experience_for_next_level,

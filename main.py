@@ -149,6 +149,124 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
         session.close()
 
 
+def calculate_elo_delta(
+    player_rating: int,
+    opponent_rating: int,
+    score: float,
+    k_factor: int = 24,
+) -> int:
+    expected_score = 1 / (1 + (10 ** ((opponent_rating - player_rating) / 400)))
+    return int(round(k_factor * (score - expected_score)))
+
+
+def update_match_progress(
+    winner_email: str | None,
+    loser_email: str | None,
+    winner_stat_changes: dict[str, int],
+    loser_stat_changes: dict[str, int],
+) -> dict[str, dict] | None:
+    if not winner_email and not loser_email:
+        return None
+
+    normalized_winner_email = decode_email(winner_email) if winner_email else None
+    normalized_loser_email = decode_email(loser_email) if loser_email else None
+
+    session = SessionLocal()
+    try:
+        winner_progress = (
+            get_or_create_progress(session, normalized_winner_email)
+            if normalized_winner_email
+            else None
+        )
+        loser_progress = (
+            get_or_create_progress(session, normalized_loser_email)
+            if normalized_loser_email
+            else None
+        )
+
+        winner_snapshot = None
+        loser_snapshot = None
+
+        winner_rating = 1000
+        loser_rating = 1000
+
+        if winner_progress:
+            winner_stats, winner_achievements, winner_talent_ranks, winner_specialization = read_progress_state(winner_progress)
+            winner_previous_achievements = list(winner_achievements)
+            winner_rating = int(winner_stats.get("elo_rating", 1000))
+        else:
+            winner_stats = winner_achievements = winner_talent_ranks = winner_specialization = winner_previous_achievements = None
+
+        if loser_progress:
+            loser_stats, loser_achievements, loser_talent_ranks, loser_specialization = read_progress_state(loser_progress)
+            loser_previous_achievements = list(loser_achievements)
+            loser_rating = int(loser_stats.get("elo_rating", 1000))
+        else:
+            loser_stats = loser_achievements = loser_talent_ranks = loser_specialization = loser_previous_achievements = None
+
+        winner_delta = calculate_elo_delta(winner_rating, loser_rating, 1.0)
+        loser_delta = calculate_elo_delta(loser_rating, winner_rating, 0.0)
+
+        if winner_progress:
+            for key, amount in winner_stat_changes.items():
+                winner_stats[key] = int(winner_stats.get(key, 0)) + int(amount)
+            winner_stats["elo_rating"] = max(100, winner_rating + winner_delta)
+            winner_achievements = evaluate_achievements(winner_stats, winner_achievements)
+            winner_xp_gain = calculate_experience_gain(
+                winner_stat_changes,
+                winner_previous_achievements,
+                winner_achievements,
+            )
+            if winner_xp_gain > 0:
+                winner_stats["experience_total"] = int(winner_stats.get("experience_total", 0)) + winner_xp_gain
+            save_progress_state(
+                winner_progress,
+                winner_stats,
+                winner_achievements,
+                winner_talent_ranks,
+                winner_specialization,
+            )
+
+        if loser_progress:
+            for key, amount in loser_stat_changes.items():
+                loser_stats[key] = int(loser_stats.get(key, 0)) + int(amount)
+            loser_stats["elo_rating"] = max(100, loser_rating + loser_delta)
+            loser_achievements = evaluate_achievements(loser_stats, loser_achievements)
+            loser_xp_gain = calculate_experience_gain(
+                loser_stat_changes,
+                loser_previous_achievements,
+                loser_achievements,
+            )
+            if loser_xp_gain > 0:
+                loser_stats["experience_total"] = int(loser_stats.get("experience_total", 0)) + loser_xp_gain
+            save_progress_state(
+                loser_progress,
+                loser_stats,
+                loser_achievements,
+                loser_talent_ranks,
+                loser_specialization,
+            )
+
+        session.commit()
+
+        if winner_progress:
+            session.refresh(winner_progress)
+            winner_snapshot = build_progress_snapshot(winner_progress)
+        if loser_progress:
+            session.refresh(loser_progress)
+            loser_snapshot = build_progress_snapshot(loser_progress)
+
+        return {
+            "winner": winner_snapshot,
+            "loser": loser_snapshot,
+        }
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def get_player_talent_bonuses(email: str | None) -> dict:
     if not email:
         return {}
@@ -651,10 +769,15 @@ async def play_hand(game_id: str, request: dict):
         "gold": multiplier + player.gold_gain_flat
     })
 
-    if player.account_email:
+    if winner:
+        update_match_progress(
+            player.account_email,
+            opponent.account_email,
+            stat_changes,
+            {"games_lost": 1},
+        )
+    elif player.account_email:
         update_player_progress(player.account_email, stat_changes)
-    if winner and opponent.account_email:
-        update_player_progress(opponent.account_email, {"games_lost": 1})
 
     return {
         "message": f"{player_id} played a hand",
