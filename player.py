@@ -107,8 +107,12 @@ class Player:
         self.max_health = 100
         self.max_discards = 1
         self.hand_size = 8
-        self.damage_modifier = 1.0 + (self.talent_bonuses.get("damage_pct", 0) / 100.0)
+        self.damage_modifier = 1.0 + (
+            (self.talent_bonuses.get("damage_pct", 0) + self.level_reward_bonuses.get("damage_pct", 0))
+            / 100.0
+        )
         self.max_health += int(self.talent_bonuses.get("health_flat", 0))
+        self.max_health += int(self.level_reward_bonuses.get("health_flat", 0))
         self.water_damage_modifier = 1.0 + (self.talent_bonuses.get("water_damage_pct", 0) / 100.0)
         self.fire_damage_modifier = 1.0 + (self.talent_bonuses.get("fire_damage_pct", 0) / 100.0)
         self.air_damage_modifier = 1.0 + (self.talent_bonuses.get("air_damage_pct", 0) / 100.0)
@@ -116,10 +120,22 @@ class Player:
         self.plasma_damage_modifier = 1.0 + (self.talent_bonuses.get("plasma_damage_pct", 0) / 100.0)
         self.low_card_damage_modifier = 1.0 + (self.talent_bonuses.get("low_card_damage_pct", 0) / 100.0)
         self.high_card_damage_modifier = 1.0 + (self.talent_bonuses.get("high_card_damage_pct", 0) / 100.0)
-        self.water_draw_modifier = 1.0 + (self.talent_bonuses.get("water_draw_pct", 0) / 100.0)
-        self.fire_draw_modifier = 1.0 + (self.talent_bonuses.get("fire_draw_pct", 0) / 100.0)
-        self.air_draw_modifier = 1.0 + (self.talent_bonuses.get("air_draw_pct", 0) / 100.0)
-        self.earth_draw_modifier = 1.0 + (self.talent_bonuses.get("earth_draw_pct", 0) / 100.0)
+        self.water_draw_modifier = 1.0 + (
+            (self.talent_bonuses.get("water_draw_pct", 0) + self.level_reward_bonuses.get("water_draw_pct", 0))
+            / 100.0
+        )
+        self.fire_draw_modifier = 1.0 + (
+            (self.talent_bonuses.get("fire_draw_pct", 0) + self.level_reward_bonuses.get("fire_draw_pct", 0))
+            / 100.0
+        )
+        self.air_draw_modifier = 1.0 + (
+            (self.talent_bonuses.get("air_draw_pct", 0) + self.level_reward_bonuses.get("air_draw_pct", 0))
+            / 100.0
+        )
+        self.earth_draw_modifier = 1.0 + (
+            (self.talent_bonuses.get("earth_draw_pct", 0) + self.level_reward_bonuses.get("earth_draw_pct", 0))
+            / 100.0
+        )
         self.plasma_draw_modifier = 1.0 + (self.talent_bonuses.get("plasma_draw_pct", 0) / 100.0)
         self.low_card_draw_modifier = 1.0 + (self.talent_bonuses.get("low_card_draw_pct", 0) / 100.0)
         self.high_card_draw_modifier = 1.0 + (self.talent_bonuses.get("high_card_draw_pct", 0) / 100.0)
@@ -138,7 +154,10 @@ class Player:
         self.plasma_damage_modifier += self.level_reward_bonuses.get("plasma_damage_pct", 0) / 100.0
         self.plasma_bonus_value = int(self.level_reward_bonuses.get("plasma_bonus_value", 0))
 
-        health_percentage_bonus = 1.0 + (self.talent_bonuses.get("health_pct", 0) / 100.0)
+        health_percentage_bonus = 1.0 + (
+            (self.talent_bonuses.get("health_pct", 0) + self.level_reward_bonuses.get("health_pct", 0))
+            / 100.0
+        )
         self.max_discards += int(self.talent_bonuses.get("max_discards_flat", 0))
         self.hand_size += int(self.talent_bonuses.get("hand_size_flat", 0))
         for upgrade in self.upgrades:

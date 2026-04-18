@@ -59,6 +59,7 @@ class Game:
         talent_bonuses: dict | None = None,
         avatar: str | None = None,
         level_unlocks: list[str] | None = None,
+        level_reward_bonuses: dict | None = None,
     ):
         if player_name not in self.players:
             self.players[player_name] = Player(
@@ -67,6 +68,7 @@ class Game:
                 talent_bonuses=talent_bonuses,
                 avatar=avatar,
                 level_unlocks=level_unlocks,
+                level_reward_bonuses=level_reward_bonuses,
             )
             return
 
@@ -78,6 +80,8 @@ class Game:
             player.avatar = avatar
         if level_unlocks is not None:
             player.level_unlocks = list(level_unlocks)
+        if level_reward_bonuses is not None:
+            player.level_reward_bonuses = dict(level_reward_bonuses)
         player.apply_upgrades()
         player.special_deck = player.build_special_deck()
 

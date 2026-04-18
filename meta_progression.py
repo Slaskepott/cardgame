@@ -23,16 +23,82 @@ SPECIALIZATIONS = [
 
 LEVEL_MILESTONE_DEFINITIONS = [
     {
+        "id": "iron_training",
+        "level": 2,
+        "name": "Iron Training",
+        "description": "Gain a small permanent health bump.",
+    },
+    {
+        "id": "starlit_edges",
+        "level": 3,
+        "name": "Starlit Edges",
+        "description": "Your cards gain a cleaner metallic edge treatment.",
+    },
+    {
+        "id": "ember_instinct",
+        "level": 4,
+        "name": "Ember Instinct",
+        "description": "Your Fire draw chance ticks upward.",
+    },
+    {
         "id": "joker",
         "level": 5,
         "name": "The Joker",
         "description": "Adds a wild Joker to your round pool. It can stand in for any card you have unlocked.",
     },
     {
+        "id": "duelist_lacquer",
+        "level": 6,
+        "name": "Duelist Lacquer",
+        "description": "Your hand picks up a richer polished finish.",
+    },
+    {
+        "id": "sky_whisper",
+        "level": 7,
+        "name": "Sky Whisper",
+        "description": "Your Air draw chance improves a little.",
+    },
+    {
+        "id": "killer_instinct",
+        "level": 8,
+        "name": "Killer Instinct",
+        "description": "Gain a light overall damage increase.",
+    },
+    {
+        "id": "deep_current",
+        "level": 9,
+        "name": "Deep Current",
+        "description": "Your Water draw chance improves a little.",
+    },
+    {
         "id": "flame",
         "level": 10,
         "name": "The Flame",
         "description": "Adds The Flame to your round pool. It counts as any Fire card.",
+    },
+    {
+        "id": "stone_memory",
+        "level": 11,
+        "name": "Stone Memory",
+        "description": "Your Earth draw chance improves a little.",
+    },
+    {
+        "id": "constellation_foil",
+        "level": 12,
+        "name": "Constellation Foil",
+        "description": "Your cards pick up a subtle celestial foil shimmer.",
+    },
+    {
+        "id": "battle_hardened",
+        "level": 13,
+        "name": "Battle Hardened",
+        "description": "Gain another small chunk of health.",
+    },
+    {
+        "id": "prismatic_knack",
+        "level": 14,
+        "name": "Prismatic Knack",
+        "description": "A small all-purpose damage boost before the big unlocks start.",
     },
     {
         "id": "fifteen",
@@ -605,11 +671,34 @@ def build_level_milestones(level: int) -> list[dict]:
 def compute_level_reward_bonuses(reward_ids: list[str] | None) -> dict[str, int]:
     reward_set = set(reward_ids or [])
     bonuses = {
+        "damage_pct": 0,
+        "health_pct": 0,
+        "health_flat": 0,
+        "fire_draw_pct": 0,
+        "air_draw_pct": 0,
+        "earth_draw_pct": 0,
+        "water_draw_pct": 0,
         "plasma_draw_pct": 0,
         "plasma_damage_pct": 0,
         "plasma_bonus_value": 0,
     }
 
+    if "iron_training" in reward_set:
+        bonuses["health_flat"] += 6
+    if "ember_instinct" in reward_set:
+        bonuses["fire_draw_pct"] += 6
+    if "sky_whisper" in reward_set:
+        bonuses["air_draw_pct"] += 6
+    if "killer_instinct" in reward_set:
+        bonuses["damage_pct"] += 2
+    if "deep_current" in reward_set:
+        bonuses["water_draw_pct"] += 6
+    if "stone_memory" in reward_set:
+        bonuses["earth_draw_pct"] += 6
+    if "battle_hardened" in reward_set:
+        bonuses["health_flat"] += 10
+    if "prismatic_knack" in reward_set:
+        bonuses["damage_pct"] += 3
     if "plasma_attunement" in reward_set:
         bonuses["plasma_draw_pct"] += 18
     if "arc_furnace" in reward_set:
