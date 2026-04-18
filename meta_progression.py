@@ -26,7 +26,7 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "id": "iron_training",
         "level": 2,
         "name": "Iron Training",
-        "description": "Gain a small permanent health bump.",
+        "description": "+6 max health.",
     },
     {
         "id": "starlit_edges",
@@ -38,7 +38,7 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "id": "ember_instinct",
         "level": 4,
         "name": "Ember Instinct",
-        "description": "Your Fire draw chance ticks upward.",
+        "description": "+6% Fire draw chance.",
     },
     {
         "id": "joker",
@@ -56,19 +56,19 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "id": "sky_whisper",
         "level": 7,
         "name": "Sky Whisper",
-        "description": "Your Air draw chance improves a little.",
+        "description": "+6% Air draw chance.",
     },
     {
         "id": "killer_instinct",
         "level": 8,
         "name": "Killer Instinct",
-        "description": "Gain a light overall damage increase.",
+        "description": "+2% overall damage.",
     },
     {
         "id": "deep_current",
         "level": 9,
         "name": "Deep Current",
-        "description": "Your Water draw chance improves a little.",
+        "description": "+6% Water draw chance.",
     },
     {
         "id": "flame",
@@ -80,7 +80,7 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "id": "stone_memory",
         "level": 11,
         "name": "Stone Memory",
-        "description": "Your Earth draw chance improves a little.",
+        "description": "+6% Earth draw chance.",
     },
     {
         "id": "constellation_foil",
@@ -92,13 +92,13 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "id": "battle_hardened",
         "level": 13,
         "name": "Battle Hardened",
-        "description": "Gain another small chunk of health.",
+        "description": "+10 max health.",
     },
     {
         "id": "prismatic_knack",
         "level": 14,
         "name": "Prismatic Knack",
-        "description": "A small all-purpose damage boost before the big unlocks start.",
+        "description": "+3% overall damage.",
     },
     {
         "id": "fifteen",
@@ -116,25 +116,25 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "id": "plasma_attunement",
         "level": 17,
         "name": "Plasma Attunement",
-        "description": "Your deck starts leaning toward Plasma. Gain a healthy Plasma draw chance boost.",
+        "description": "+18% Plasma draw chance.",
     },
     {
         "id": "arc_furnace",
         "level": 18,
         "name": "Arc Furnace",
-        "description": "Your Plasma cards hit harder with a damage boost that makes the suit feel dangerous.",
+        "description": "+18% Plasma damage.",
     },
     {
         "id": "afterimage_coil",
         "level": 19,
         "name": "Afterimage Coil",
-        "description": "Each round you inject extra premium Plasma cards into your personal pool.",
+        "description": "Adds 2 bonus 15 of Plasma cards to your personal round pool.",
     },
     {
         "id": "singularity_engine",
         "level": 20,
         "name": "Singularity Engine",
-        "description": "Your Plasma cards surge with unstable energy and gain bonus base value for damage.",
+        "description": "+2 base value on every Plasma card.",
     },
 ]
 
