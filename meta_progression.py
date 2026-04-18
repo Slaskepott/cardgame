@@ -42,9 +42,33 @@ LEVEL_MILESTONE_DEFINITIONS = [
     },
     {
         "id": "plasma",
-        "level": 20,
+        "level": 16,
         "name": "Plasma",
         "description": "Unlocks the Plasma element and adds a full Plasma suit to your round pool.",
+    },
+    {
+        "id": "plasma_attunement",
+        "level": 17,
+        "name": "Plasma Attunement",
+        "description": "Your deck starts leaning toward Plasma. Gain a healthy Plasma draw chance boost.",
+    },
+    {
+        "id": "arc_furnace",
+        "level": 18,
+        "name": "Arc Furnace",
+        "description": "Your Plasma cards hit harder with a damage boost that makes the suit feel dangerous.",
+    },
+    {
+        "id": "afterimage_coil",
+        "level": 19,
+        "name": "Afterimage Coil",
+        "description": "Each round you inject extra premium Plasma cards into your personal pool.",
+    },
+    {
+        "id": "singularity_engine",
+        "level": 20,
+        "name": "Singularity Engine",
+        "description": "Your Plasma cards surge with unstable energy and gain bonus base value for damage.",
     },
 ]
 
@@ -576,6 +600,24 @@ def build_level_milestones(level: int) -> list[dict]:
         }
         for milestone in LEVEL_MILESTONE_DEFINITIONS
     ]
+
+
+def compute_level_reward_bonuses(reward_ids: list[str] | None) -> dict[str, int]:
+    reward_set = set(reward_ids or [])
+    bonuses = {
+        "plasma_draw_pct": 0,
+        "plasma_damage_pct": 0,
+        "plasma_bonus_value": 0,
+    }
+
+    if "plasma_attunement" in reward_set:
+        bonuses["plasma_draw_pct"] += 18
+    if "arc_furnace" in reward_set:
+        bonuses["plasma_damage_pct"] += 18
+    if "singularity_engine" in reward_set:
+        bonuses["plasma_bonus_value"] += 2
+
+    return bonuses
 
 
 def calculate_experience_gain(

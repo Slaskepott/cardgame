@@ -12,12 +12,14 @@ class Player:
         talent_bonuses: dict | None = None,
         avatar: str | None = None,
         level_unlocks: list[str] | None = None,
+        level_reward_bonuses: dict | None = None,
     ):
         self.name = name
         self.account_email = account_email
         self.avatar = avatar or "👤"
         self.talent_bonuses = talent_bonuses or {}
         self.level_unlocks = list(level_unlocks or [])
+        self.level_reward_bonuses = level_reward_bonuses or {}
         self.max_health = 100
         self.health = self.max_health
         self.wins = 0
@@ -51,6 +53,7 @@ class Player:
         self.full_house_damage_modifier = 1.0
         self.gold_gain_flat = 0
         self.damage_taken_multiplier = 1.0
+        self.plasma_bonus_value = 0
         self.apply_upgrades()
         self.special_deck = self.build_special_deck()
 
@@ -91,6 +94,13 @@ class Player:
             for rank in ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]:
                 special_cards.append(Card(rank, "Plasma"))
 
+        if "afterimage_coil" in self.level_unlocks:
+            special_cards.extend([
+                Card("Q", "Plasma"),
+                Card("K", "Plasma"),
+                Card("A", "Plasma"),
+            ])
+
         return special_cards
 
     def apply_upgrades(self):
@@ -124,6 +134,9 @@ class Player:
             0.1,
             1.0 + (self.talent_bonuses.get("damage_taken_pct", 0) / 100.0),
         )
+        self.plasma_draw_modifier += self.level_reward_bonuses.get("plasma_draw_pct", 0) / 100.0
+        self.plasma_damage_modifier += self.level_reward_bonuses.get("plasma_damage_pct", 0) / 100.0
+        self.plasma_bonus_value = int(self.level_reward_bonuses.get("plasma_bonus_value", 0))
 
         health_percentage_bonus = 1.0 + (self.talent_bonuses.get("health_pct", 0) / 100.0)
         self.max_discards += int(self.talent_bonuses.get("max_discards_flat", 0))

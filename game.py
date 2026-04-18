@@ -239,7 +239,8 @@ class Game:
                 rank_modifier *= player.high_card_damage_modifier
 
             total_modifier = modifier_dict.get(suit, 1.0) * player.damage_modifier * rank_modifier
-            base_values.append(rank * total_modifier)
+            damage_rank = rank + (player.plasma_bonus_value if suit == "Plasma" else 0)
+            base_values.append(damage_rank * total_modifier)
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)
         is_flush = len(cards) >= 5 and max(suit_counts.values()) == len(cards)

@@ -15,6 +15,7 @@ from meta_progression import (
     build_meta_snapshot,
     calculate_experience_gain,
     can_unlock_talent,
+    compute_level_reward_bonuses,
     compute_talent_bonuses,
     default_stats,
     decode_talent_state,
@@ -172,6 +173,7 @@ def get_player_account_state(email: str | None) -> dict:
             "talent_bonuses": {},
             "level": 1,
             "level_rewards": [],
+            "level_reward_bonuses": {},
         }
 
     normalized_email = decode_email(email)
@@ -185,6 +187,7 @@ def get_player_account_state(email: str | None) -> dict:
             "talent_bonuses": compute_talent_bonuses(talent_ranks),
             "level": level,
             "level_rewards": unlocked_level_reward_ids(level),
+            "level_reward_bonuses": compute_level_reward_bonuses(unlocked_level_reward_ids(level)),
         }
     except Exception:
         session.rollback()
@@ -192,6 +195,7 @@ def get_player_account_state(email: str | None) -> dict:
             "talent_bonuses": {},
             "level": 1,
             "level_rewards": [],
+            "level_reward_bonuses": {},
         }
     finally:
         session.close()
@@ -417,6 +421,7 @@ async def join_game(
         talent_bonuses=account_state["talent_bonuses"],
         avatar=avatar,
         level_unlocks=account_state["level_rewards"],
+        level_reward_bonuses=account_state["level_reward_bonuses"],
     )
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
