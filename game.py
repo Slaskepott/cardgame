@@ -112,7 +112,9 @@ class Game:
         if not self.deck:
             self.deck = self.generate_deck()
 
-        card = self.deck.pop(random.randint(0, len(self.deck) - 1))
+        weights = [player.get_draw_weight(card) for card in self.deck]
+        selected_index = random.choices(range(len(self.deck)), weights=weights, k=1)[0]
+        card = self.deck.pop(selected_index)
         player.hand.append(card)
         return card
 

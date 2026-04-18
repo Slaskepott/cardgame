@@ -3,7 +3,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict
 from game import Game
-import random
 import stripe
 import os
 import urllib.parse
@@ -318,6 +317,17 @@ def summarize_played_hand(cards: list[dict], hand_type: str) -> dict[str, int]:
 
     return stat_changes
 
+
+def summarize_drawn_hand(cards: list[dict]) -> dict[str, int]:
+    if len(cards) < 8:
+        return {}
+
+    ranks = {card["rank"] for card in cards}
+    if len(ranks) == 1:
+        return {"full_hand_of_a_kind_draws": 1}
+
+    return {}
+
 @app.get("/games")
 def list_games():
     return {
@@ -435,7 +445,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     if not player.hand:
         for _ in range(8):
             if game.deck:
-                player.hand.append(game.deck.pop(random.randint(0, len(game.deck) - 1)))
+                game.deal_card(player_id)
 
         print(f"Dealt hand to {player_id}: {[str(card) for card in player.hand]}")
 
@@ -448,6 +458,12 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     }
     await websocket.send_json(hand_message)
     print(f"Sent hand to {player_id} via WebSocket: {player.hand}")
+
+    if player.account_email:
+        update_player_progress(
+            player.account_email,
+            summarize_drawn_hand(hand_message["cards"]),
+        )
 
     try:
         while True:
@@ -502,9 +518,10 @@ async def discard(game_id: str, request: dict):
     await game.broadcast(hand_message)
 
     if player.account_email:
+        draw_stats = summarize_drawn_hand(result["new_hand"])
         update_player_progress(
             player.account_email,
-            {"cards_discarded": len(result["discarded"])},
+            {"cards_discarded": len(result["discarded"]), **draw_stats},
         )
 
     return {
@@ -550,6 +567,7 @@ async def play_hand(game_id: str, request: dict):
     result = game.remove_selected_cards(player_id, selected_cards)
     if "error" in result:
         return result
+    stat_changes.update(summarize_drawn_hand(result["new_hand"]))
 
     # Apply damage to opponent
     opponent.health = max(0, opponent.health - actual_damage)

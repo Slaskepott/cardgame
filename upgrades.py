@@ -80,6 +80,18 @@ class UpgradeStore:
             self.add_upgrade(id_counter, f"Increase {element} Damage", 3, "epic", f"+60% {element} Damage", 10)
             id_counter += 1
 
+        for element in elements:
+            self.add_upgrade(id_counter, f"Increase {element} Draw", 1, "common", f"+8% {element} Draw Chance", 4)
+            id_counter += 1
+            self.add_upgrade(id_counter, f"Increase {element} Draw", 2, "uncommon", f"+15% {element} Draw Chance", 7)
+            id_counter += 1
+            self.add_upgrade(id_counter, f"Increase {element} Draw", 3, "rare", f"+25% {element} Draw Chance", 11)
+            id_counter += 1
+            self.add_upgrade(id_counter, f"Increase {element} Draw", 4, "epic", f"+40% {element} Draw Chance", 16)
+            id_counter += 1
+            self.add_upgrade(id_counter, f"Increase {element} Draw", 5, "legendary", f"+60% {element} Draw Chance", 23)
+            id_counter += 1
+
         # Card rank specialists
         self.add_upgrade(id_counter, "High Cards Specialist", 1, "common", "+5% High Card Damage", 5)
         id_counter += 1
@@ -101,6 +113,38 @@ class UpgradeStore:
         self.add_upgrade(id_counter, "Low Cards Specialist", 4, "epic", "+80% Low Card Damage", 24)
         id_counter += 1
         self.add_upgrade(id_counter, "Low Cards Specialist", 5, "legendary", "+120% Low Card Damage", 34)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "High Draw Specialist", 1, "common", "+8% High Card Draw Chance", 5)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Draw Specialist", 2, "uncommon", "+15% High Card Draw Chance", 8)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Draw Specialist", 3, "rare", "+25% High Card Draw Chance", 12)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Draw Specialist", 4, "epic", "+40% High Card Draw Chance", 18)
+        id_counter += 1
+        self.add_upgrade(id_counter, "High Draw Specialist", 5, "legendary", "+60% High Card Draw Chance", 26)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "Low Draw Specialist", 1, "common", "+10% Low Card Draw Chance", 6)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Draw Specialist", 2, "uncommon", "+18% Low Card Draw Chance", 9)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Draw Specialist", 3, "rare", "+30% Low Card Draw Chance", 14)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Draw Specialist", 4, "epic", "+50% Low Card Draw Chance", 21)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Low Draw Specialist", 5, "legendary", "+80% Low Card Draw Chance", 30)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "Royal Invitation", 1, "epic", "+25% Q/K/A Draw Chance", 18)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Royal Invitation", 2, "legendary", "+50% Q/K/A Draw Chance", 29)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "Tiny Troublemakers", 1, "epic", "+45% 2/3 Draw Chance", 17)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Tiny Troublemakers", 2, "legendary", "+90% 2/3 Draw Chance", 28)
 
 
     def add_upgrade(self, id, name, tier, rarity, effect, cost):
