@@ -100,25 +100,25 @@ def read_progress_state(progression: PlayerProgression):
     stats = load_json_blob(progression.stats_json, default_stats())
     achievements = load_json_blob(progression.achievements_json, [])
     talents_state = load_json_blob(progression.talents_json, [])
-    talents, specialization = decode_talent_state(talents_state)
-    return stats, achievements, talents, specialization
+    talent_ranks, specialization = decode_talent_state(talents_state)
+    return stats, achievements, talent_ranks, specialization
 
 
 def save_progress_state(
     progression: PlayerProgression,
     stats: dict,
     achievements: list[str],
-    talents: list[str],
+    talent_ranks: dict[str, int],
     specialization: str | None,
 ):
     progression.stats_json = json.dumps(stats)
     progression.achievements_json = json.dumps(sorted(set(achievements)))
-    progression.talents_json = json.dumps(encode_talent_state(talents, specialization))
+    progression.talents_json = json.dumps(encode_talent_state(talent_ranks, specialization))
 
 
 def build_progress_snapshot(progression: PlayerProgression) -> dict:
-    stats, achievements, talents, specialization = read_progress_state(progression)
-    return build_meta_snapshot(stats, achievements, talents, specialization)
+    stats, achievements, talent_ranks, specialization = read_progress_state(progression)
+    return build_meta_snapshot(stats, achievements, talent_ranks, specialization)
 
 
 def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
@@ -126,11 +126,11 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        stats, achievements, talents, specialization = read_progress_state(progression)
+        stats, achievements, talent_ranks, specialization = read_progress_state(progression)
         for key, amount in stat_changes.items():
             stats[key] = int(stats.get(key, 0)) + int(amount)
         achievements = evaluate_achievements(stats, achievements)
-        save_progress_state(progression, stats, achievements, talents, specialization)
+        save_progress_state(progression, stats, achievements, talent_ranks, specialization)
         session.commit()
         session.refresh(progression)
         return build_progress_snapshot(progression)
@@ -149,9 +149,9 @@ def get_player_talent_bonuses(email: str | None) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        _, _, talents, _ = read_progress_state(progression)
+        _, _, talent_ranks, _ = read_progress_state(progression)
         session.commit()
-        return compute_talent_bonuses(talents)
+        return compute_talent_bonuses(talent_ranks)
     except Exception:
         session.rollback()
         return {}
@@ -245,17 +245,17 @@ def unlock_talent(email: str, talent_id: str):
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, decoded_email)
-        stats, achievements, talents, specialization = read_progress_state(progression)
-        can_unlock, error = can_unlock_talent(talent_id, achievements, talents, specialization)
+        stats, achievements, talent_ranks, specialization = read_progress_state(progression)
+        can_unlock, error = can_unlock_talent(talent_id, achievements, talent_ranks, specialization)
         if not can_unlock:
             return {"error": error or "Unable to unlock talent"}
 
         if not specialization:
             talent_definition = get_talent_definition(talent_id)
             specialization = talent_definition["specialization"] if talent_definition else None
-        talents = sorted(set(talents + [talent_id]))
+        talent_ranks[talent_id] = int(talent_ranks.get(talent_id, 0)) + 1
         achievements = evaluate_achievements(stats, achievements)
-        save_progress_state(progression, stats, achievements, talents, specialization)
+        save_progress_state(progression, stats, achievements, talent_ranks, specialization)
         session.commit()
         session.refresh(progression)
         return build_progress_snapshot(progression)
@@ -443,7 +443,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
 
     # ✅ Deal hand *only if* player has no cards yet    
     if not player.hand:
-        for _ in range(8):
+        for _ in range(player.hand_size):
             if game.deck:
                 game.deal_card(player_id)
 
@@ -585,7 +585,7 @@ async def play_hand(game_id: str, request: dict):
 
     # Move turn
     game.turn_index = (game.turn_index + 1) % len(game.players)
-    player.gold += multiplier #placeholder
+    player.gold += multiplier + player.gold_gain_flat
 
     # Broadcast update
     await game.broadcast({
@@ -602,7 +602,7 @@ async def play_hand(game_id: str, request: dict):
         "multiplier": multiplier,
         "winner": winner,
         "remaining_discards": player.remaining_discards,
-        "gold": multiplier #placeholder
+        "gold": multiplier + player.gold_gain_flat
     })
 
     if player.account_email:

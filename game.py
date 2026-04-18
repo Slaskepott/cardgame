@@ -145,7 +145,7 @@ class Game:
         player.hand = new_hand
 
         # Draw new cards to maintain hand size (if possible)
-        while len(player.hand) < 8 and self.deck:
+        while len(player.hand) < player.hand_size and self.deck:
             self.deal_card(player_id)
 
         return {
@@ -255,7 +255,17 @@ class Game:
             hand_type = "high card"
 
         multiplier = multipliers[hand_type]
+        hand_type_modifier = 1.0
+        if hand_type in {"pair", "two pair"}:
+            hand_type_modifier *= player.pair_damage_modifier
+        if hand_type in {"straight", "straight flush", "royal flush"}:
+            hand_type_modifier *= player.straight_damage_modifier
+        if hand_type in {"flush", "straight flush", "royal flush"}:
+            hand_type_modifier *= player.flush_damage_modifier
+        if hand_type in {"three of a kind", "full house"}:
+            hand_type_modifier *= player.full_house_damage_modifier
+
         base_damage = sum(base_values) // len(base_values)
-        total_damage = base_damage * multiplier
+        total_damage = int(round(base_damage * multiplier * hand_type_modifier))
 
         return total_damage, hand_type, multiplier
