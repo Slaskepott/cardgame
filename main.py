@@ -187,20 +187,20 @@ def update_match_progress(
         winner_snapshot = None
         loser_snapshot = None
 
-        winner_rating = 1000
-        loser_rating = 1000
+        winner_rating = 1500
+        loser_rating = 1500
 
         if winner_progress:
             winner_stats, winner_achievements, winner_talent_ranks, winner_specialization = read_progress_state(winner_progress)
             winner_previous_achievements = list(winner_achievements)
-            winner_rating = int(winner_stats.get("elo_rating", 1000))
+            winner_rating = int(winner_stats.get("elo_rating", 1500))
         else:
             winner_stats = winner_achievements = winner_talent_ranks = winner_specialization = winner_previous_achievements = None
 
         if loser_progress:
             loser_stats, loser_achievements, loser_talent_ranks, loser_specialization = read_progress_state(loser_progress)
             loser_previous_achievements = list(loser_achievements)
-            loser_rating = int(loser_stats.get("elo_rating", 1000))
+            loser_rating = int(loser_stats.get("elo_rating", 1500))
         else:
             loser_stats = loser_achievements = loser_talent_ranks = loser_specialization = loser_previous_achievements = None
 
