@@ -710,6 +710,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         "player": player_id,
         "cards": [{"rank": c.rank, "suit": c.suit} for c in player.hand],
         "next_player": list(game.players.keys())[game.turn_index],
+        "remaining_discards": player.remaining_discards,
     }
     await websocket.send_json(hand_message)
     await websocket.send_json(game.serialize_match_state())
