@@ -652,6 +652,16 @@ async def leave_game(game_id: str, player_id: str):
     if player_id not in game.players:
         return {"error": "Player not found"}
 
+    if len(game.players) > 1 and game.phase != "match_over":
+        opponent_id = game.get_opponent_id(player_id)
+        if opponent_id:
+            await finalize_match(
+                game_id,
+                opponent_id,
+                player_id,
+                f"{player_id} left the lobby.",
+            )
+
     game.remove_player(player_id)
 
     if not game.players:
