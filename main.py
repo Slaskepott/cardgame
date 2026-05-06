@@ -556,7 +556,7 @@ def set_talent_element(email: str, talent_id: str, element: str):
         session.close()
 
 
-@app.post("/meta/{email}/talents/reset")
+@app.post("/meta/{email}/talents/reset-all")
 def reset_talents(email: str):
     decoded_email = decode_email(email)
     session = SessionLocal()
