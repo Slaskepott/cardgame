@@ -1,7 +1,11 @@
 import asyncio
+import os
+
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from card import Card
 from game import Game
+from main import summarize_drawn_hand
 from player import Player
 from upgrades import Upgrade
 
@@ -253,3 +257,33 @@ def test_talent_shop_reroll_bonus_is_applied_to_initial_shop_rerolls():
 
     assert game.get_initial_shop_rerolls("alice") == 1
     assert game.get_initial_shop_rerolls("bob") == 1
+
+
+def test_summarize_drawn_hand_counts_five_of_a_rank_as_achievement_progress():
+    hand = [
+        {"rank": "7", "suit": "Fire"},
+        {"rank": "7", "suit": "Air"},
+        {"rank": "7", "suit": "Earth"},
+        {"rank": "7", "suit": "Water"},
+        {"rank": "7", "suit": "Fire"},
+        {"rank": "Q", "suit": "Water"},
+        {"rank": "A", "suit": "Air"},
+        {"rank": "3", "suit": "Earth"},
+    ]
+
+    assert summarize_drawn_hand(hand) == {"full_hand_of_a_kind_draws": 1}
+
+
+def test_summarize_drawn_hand_ignores_four_of_a_rank():
+    hand = [
+        {"rank": "7", "suit": "Fire"},
+        {"rank": "7", "suit": "Air"},
+        {"rank": "7", "suit": "Earth"},
+        {"rank": "7", "suit": "Water"},
+        {"rank": "Q", "suit": "Water"},
+        {"rank": "A", "suit": "Air"},
+        {"rank": "3", "suit": "Earth"},
+        {"rank": "5", "suit": "Fire"},
+    ]
+
+    assert summarize_drawn_hand(hand) == {}

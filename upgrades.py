@@ -149,9 +149,9 @@ class UpgradeStore:
         self.add_upgrade(id_counter, "Royal Invitation", 2, "legendary", "+50% Q/K/A Draw Chance", 29)
         id_counter += 1
 
-        self.add_upgrade(id_counter, "Tiny Troublemakers", 1, "epic", "+45% 2/3 Draw Chance", 17)
+        self.add_upgrade(id_counter, "Tiny Troublemakers", 1, "epic", "+45% Chance To Draw 2 Or 3", 17)
         id_counter += 1
-        self.add_upgrade(id_counter, "Tiny Troublemakers", 2, "legendary", "+90% 2/3 Draw Chance", 28)
+        self.add_upgrade(id_counter, "Tiny Troublemakers", 2, "legendary", "+90% Chance To Draw 2 Or 3", 28)
 
 
     def add_upgrade(self, id, name, tier, rarity, effect, cost):

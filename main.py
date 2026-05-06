@@ -630,8 +630,11 @@ def summarize_drawn_hand(cards: list[dict]) -> dict[str, int]:
     if len(cards) < 8:
         return {}
 
-    ranks = {card["rank"] for card in cards}
-    if len(ranks) == 1:
+    rank_counts: dict[str, int] = {}
+    for card in cards:
+        rank_counts[card["rank"]] = rank_counts.get(card["rank"], 0) + 1
+
+    if rank_counts and max(rank_counts.values()) >= 5:
         return {"full_hand_of_a_kind_draws": 1}
 
     return {}
