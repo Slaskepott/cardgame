@@ -20,6 +20,7 @@ SPECIALIZATIONS = [
         "description": "Draw smoother, cycle harder, and twist the economy of every round.",
     },
 ]
+ELEMENT_OPTIONS = ["Fire", "Air", "Earth", "Water"]
 
 LEVEL_MILESTONE_DEFINITIONS = [
     {
@@ -212,49 +213,49 @@ TALENT_DEFINITIONS = [
         "id": "offense_firebrand",
         "specialization": "offense",
         "name": "Firebrand",
-        "description": "+5% Fire damage and +9% Fire draw chance per rank.",
+        "description": "Choose an element. +5% elemental damage and +9% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["offense_root"],
         "row": 1,
         "column": 0,
-        "bonuses": {"fire_damage_pct": 5, "fire_draw_pct": 9},
+        "elemental_choice": {"damage_pct": 5, "draw_pct": 9},
     },
     {
         "id": "offense_gale_edge",
         "specialization": "offense",
         "name": "Gale Edge",
-        "description": "+5% Air damage and +9% Air draw chance per rank.",
+        "description": "Choose an element. +5% elemental damage and +9% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["offense_root"],
         "row": 1,
         "column": 1,
-        "bonuses": {"air_damage_pct": 5, "air_draw_pct": 9},
+        "elemental_choice": {"damage_pct": 5, "draw_pct": 9},
     },
     {
         "id": "offense_stonefist",
         "specialization": "offense",
         "name": "Stonefist",
-        "description": "+5% Earth damage and +9% Earth draw chance per rank.",
+        "description": "Choose an element. +5% elemental damage and +9% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["offense_root"],
         "row": 1,
         "column": 3,
-        "bonuses": {"earth_damage_pct": 5, "earth_draw_pct": 9},
+        "elemental_choice": {"damage_pct": 5, "draw_pct": 9},
     },
     {
         "id": "offense_tide_lash",
         "specialization": "offense",
         "name": "Tide Lash",
-        "description": "+5% Water damage and +9% Water draw chance per rank.",
+        "description": "Choose an element. +5% elemental damage and +9% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["offense_root"],
         "row": 1,
         "column": 4,
-        "bonuses": {"water_damage_pct": 5, "water_draw_pct": 9},
+        "elemental_choice": {"damage_pct": 5, "draw_pct": 9},
     },
     {
         "id": "offense_royal_favor",
@@ -373,49 +374,53 @@ TALENT_DEFINITIONS = [
         "id": "defense_ember_guard",
         "specialization": "defense",
         "name": "Ember Guard",
-        "description": "+18 max health and +8% Fire draw chance per rank.",
+        "description": "Choose an element. +18 max health and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_root"],
         "row": 1,
         "column": 0,
-        "bonuses": {"health_flat": 18, "fire_draw_pct": 8},
+        "bonuses": {"health_flat": 18},
+        "elemental_choice": {"draw_pct": 8},
     },
     {
         "id": "defense_gale_guard",
         "specialization": "defense",
         "name": "Gale Guard",
-        "description": "+18 max health and +8% Air draw chance per rank.",
+        "description": "Choose an element. +18 max health and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_root"],
         "row": 1,
         "column": 1,
-        "bonuses": {"health_flat": 18, "air_draw_pct": 8},
+        "bonuses": {"health_flat": 18},
+        "elemental_choice": {"draw_pct": 8},
     },
     {
         "id": "defense_stone_guard",
         "specialization": "defense",
         "name": "Stone Guard",
-        "description": "+6 armor and +8% Earth draw chance per rank.",
+        "description": "Choose an element. +6 armor and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_root"],
         "row": 1,
         "column": 3,
-        "bonuses": {"armor_flat": 6, "earth_draw_pct": 8},
+        "bonuses": {"armor_flat": 6},
+        "elemental_choice": {"draw_pct": 8},
     },
     {
         "id": "defense_tide_guard",
         "specialization": "defense",
         "name": "Tide Guard",
-        "description": "+6 armor and +8% Water draw chance per rank.",
+        "description": "Choose an element. +6 armor and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_root"],
         "row": 1,
         "column": 4,
-        "bonuses": {"armor_flat": 6, "water_draw_pct": 8},
+        "bonuses": {"armor_flat": 6},
+        "elemental_choice": {"draw_pct": 8},
     },
     {
         "id": "defense_stone_lungs",
@@ -541,37 +546,37 @@ TALENT_DEFINITIONS = [
         "id": "utility_ember_instinct",
         "specialization": "utility",
         "name": "Ember Instinct",
-        "description": "+3% Fire damage and +8% Fire draw chance per rank.",
+        "description": "Choose an element. +3% elemental damage and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["utility_root"],
         "row": 1,
         "column": 0,
-        "bonuses": {"fire_damage_pct": 3, "fire_draw_pct": 8},
+        "elemental_choice": {"damage_pct": 3, "draw_pct": 8},
     },
     {
         "id": "utility_tempest",
         "specialization": "utility",
         "name": "Tempest Instinct",
-        "description": "+3% Air damage and +8% Air draw chance per rank.",
+        "description": "Choose an element. +3% elemental damage and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["utility_root"],
         "row": 1,
         "column": 1,
-        "bonuses": {"air_damage_pct": 3, "air_draw_pct": 8},
+        "elemental_choice": {"damage_pct": 3, "draw_pct": 8},
     },
     {
         "id": "utility_tide_memory",
         "specialization": "utility",
         "name": "Tide Memory",
-        "description": "+3% Water damage and +8% Water draw chance per rank.",
+        "description": "Choose an element. +3% elemental damage and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["utility_root"],
         "row": 1,
         "column": 3,
-        "bonuses": {"water_damage_pct": 3, "water_draw_pct": 8},
+        "elemental_choice": {"damage_pct": 3, "draw_pct": 8},
     },
     {
         "id": "utility_lucky_pockets",
@@ -589,13 +594,13 @@ TALENT_DEFINITIONS = [
         "id": "utility_arcane_filter",
         "specialization": "utility",
         "name": "Arcane Filter",
-        "description": "+10% Earth draw chance per rank.",
+        "description": "Choose an element. +10% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["utility_root"],
         "row": 1,
         "column": 4,
-        "bonuses": {"earth_draw_pct": 10},
+        "elemental_choice": {"draw_pct": 10},
     },
     {
         "id": "utility_smooth_draw",
@@ -835,26 +840,87 @@ def evaluate_achievements(stats: dict, unlocked_ids: list[str] | None) -> list[s
     return sorted(unlocked)
 
 
-def decode_talent_state(raw_talents: list | dict | None) -> tuple[dict[str, int], str | None]:
+def normalize_talent_element(element: str | None) -> str | None:
+    if not element:
+        return None
+    normalized = str(element).strip().lower()
+    for option in ELEMENT_OPTIONS:
+        if option.lower() == normalized:
+            return option
+    return None
+
+
+def get_talent_selected_element(definition: dict, talent_elements: dict[str, str] | None) -> str | None:
+    elemental_choice = definition.get("elemental_choice")
+    if not elemental_choice:
+        return None
+
+    selected = normalize_talent_element((talent_elements or {}).get(definition["id"]))
+    return selected or ELEMENT_OPTIONS[0]
+
+
+def expand_talent_bonuses(definition: dict, selected_element: str | None) -> dict[str, int]:
+    bonuses = dict(definition.get("bonuses", {}))
+    elemental_choice = definition.get("elemental_choice")
+    if not elemental_choice:
+        return bonuses
+
+    resolved_element = normalize_talent_element(selected_element) or ELEMENT_OPTIONS[0]
+    resolved_key = resolved_element.lower()
+
+    if "damage_pct" in elemental_choice:
+        bonuses[f"{resolved_key}_damage_pct"] = bonuses.get(f"{resolved_key}_damage_pct", 0) + int(
+            elemental_choice["damage_pct"]
+        )
+    if "draw_pct" in elemental_choice:
+        bonuses[f"{resolved_key}_draw_pct"] = bonuses.get(f"{resolved_key}_draw_pct", 0) + int(
+            elemental_choice["draw_pct"]
+        )
+    return bonuses
+
+
+def decode_talent_state(raw_talents: list | dict | None) -> tuple[dict[str, int], str | None, dict[str, str]]:
     if isinstance(raw_talents, dict):
         specialization = raw_talents.get("specialization")
+        raw_elements = raw_talents.get("elements", {})
+        talent_elements = (
+            {
+                talent_id: normalized
+                for talent_id, element in raw_elements.items()
+                if isinstance(talent_id, str)
+                and (normalized := normalize_talent_element(element)) is not None
+            }
+            if isinstance(raw_elements, dict)
+            else {}
+        )
         if isinstance(raw_talents.get("ranks"), dict):
             ranks = raw_talents.get("ranks", {})
-            return {talent_id: int(rank) for talent_id, rank in ranks.items() if int(rank) > 0}, specialization
+            return {
+                talent_id: int(rank) for talent_id, rank in ranks.items() if int(rank) > 0
+            }, specialization, talent_elements
 
         unlocked = raw_talents.get("unlocked", [])
-        return {talent_id: 1 for talent_id in list(unlocked or [])}, specialization
+        return {talent_id: 1 for talent_id in list(unlocked or [])}, specialization, talent_elements
 
     if isinstance(raw_talents, list):
-        return {talent_id: 1 for talent_id in raw_talents}, None
+        return {talent_id: 1 for talent_id in raw_talents}, None, {}
 
-    return {}, None
+    return {}, None, {}
 
 
-def encode_talent_state(talent_ranks: dict[str, int], specialization: str | None) -> dict:
+def encode_talent_state(
+    talent_ranks: dict[str, int],
+    specialization: str | None,
+    talent_elements: dict[str, str] | None = None,
+) -> dict:
     return {
         "ranks": {talent_id: rank for talent_id, rank in sorted(talent_ranks.items()) if rank > 0},
         "specialization": specialization,
+        "elements": {
+            talent_id: element
+            for talent_id, element in sorted((talent_elements or {}).items())
+            if normalize_talent_element(element)
+        },
     }
 
 
@@ -914,7 +980,10 @@ def can_unlock_talent(
     return True, None
 
 
-def compute_talent_bonuses(talent_ranks: dict[str, int] | None) -> dict[str, int]:
+def compute_talent_bonuses(
+    talent_ranks: dict[str, int] | None,
+    talent_elements: dict[str, str] | None = None,
+) -> dict[str, int]:
     totals = {
         "damage_pct": 0,
         "health_pct": 0,
@@ -949,7 +1018,8 @@ def compute_talent_bonuses(talent_ranks: dict[str, int] | None) -> dict[str, int
         rank = int(owned.get(talent["id"], 0))
         if rank <= 0:
             continue
-        for bonus_key, bonus_value in talent["bonuses"].items():
+        selected_element = get_talent_selected_element(talent, talent_elements)
+        for bonus_key, bonus_value in expand_talent_bonuses(talent, selected_element).items():
             totals[bonus_key] = totals.get(bonus_key, 0) + (bonus_value * rank)
     return totals
 
@@ -959,6 +1029,7 @@ def build_meta_snapshot(
     unlocked_achievements: list[str] | None,
     talent_ranks: dict[str, int] | None,
     selected_specialization: str | None,
+    talent_elements: dict[str, str] | None = None,
 ) -> dict:
     normalized_stats = normalize_stats(stats)
     achievement_ids = set(unlocked_achievements or [])
@@ -1002,6 +1073,8 @@ def build_meta_snapshot(
             "current_rank": current_rank,
             "unlocked": current_rank > 0,
             "available": can_unlock,
+            "element_options": ELEMENT_OPTIONS if definition.get("elemental_choice") else [],
+            "selected_element": get_talent_selected_element(definition, talent_elements),
         })
 
     return {
@@ -1018,7 +1091,7 @@ def build_meta_snapshot(
         "talents": talents,
         "specializations": SPECIALIZATIONS,
         "selected_specialization": selected_specialization,
-        "talent_bonuses": compute_talent_bonuses(talent_ranks),
+        "talent_bonuses": compute_talent_bonuses(talent_ranks, talent_elements),
         "level_milestones": build_level_milestones(level),
         "unlocked_level_rewards": unlocked_level_reward_ids(level),
     }

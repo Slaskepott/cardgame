@@ -23,6 +23,7 @@ from meta_progression import (
     evaluate_achievements,
     get_talent_definition,
     level_from_experience,
+    normalize_talent_element,
     unlocked_level_reward_ids,
 )
 
@@ -104,8 +105,8 @@ def read_progress_state(progression: PlayerProgression):
     stats = load_json_blob(progression.stats_json, default_stats())
     achievements = load_json_blob(progression.achievements_json, [])
     talents_state = load_json_blob(progression.talents_json, [])
-    talent_ranks, specialization = decode_talent_state(talents_state)
-    return stats, achievements, talent_ranks, specialization
+    talent_ranks, specialization, talent_elements = decode_talent_state(talents_state)
+    return stats, achievements, talent_ranks, specialization, talent_elements
 
 
 def save_progress_state(
@@ -114,15 +115,20 @@ def save_progress_state(
     achievements: list[str],
     talent_ranks: dict[str, int],
     specialization: str | None,
+    talent_elements: dict[str, str] | None = None,
 ):
     progression.stats_json = json.dumps(stats)
     progression.achievements_json = json.dumps(sorted(set(achievements)))
-    progression.talents_json = json.dumps(encode_talent_state(talent_ranks, specialization))
+    progression.talents_json = json.dumps(
+        encode_talent_state(talent_ranks, specialization, talent_elements)
+    )
 
 
 def build_progress_snapshot(progression: PlayerProgression) -> dict:
-    stats, achievements, talent_ranks, specialization = read_progress_state(progression)
-    return build_meta_snapshot(stats, achievements, talent_ranks, specialization)
+    stats, achievements, talent_ranks, specialization, talent_elements = read_progress_state(
+        progression
+    )
+    return build_meta_snapshot(stats, achievements, talent_ranks, specialization, talent_elements)
 
 
 def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
@@ -130,7 +136,9 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        stats, achievements, talent_ranks, specialization = read_progress_state(progression)
+        stats, achievements, talent_ranks, specialization, talent_elements = read_progress_state(
+            progression
+        )
         previous_achievements = list(achievements)
         for key, amount in stat_changes.items():
             stats[key] = int(stats.get(key, 0)) + int(amount)
@@ -138,7 +146,9 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
         experience_gain = calculate_experience_gain(stat_changes, previous_achievements, achievements)
         if experience_gain > 0:
             stats["experience_total"] = int(stats.get("experience_total", 0)) + experience_gain
-        save_progress_state(progression, stats, achievements, talent_ranks, specialization)
+        save_progress_state(
+            progression, stats, achievements, talent_ranks, specialization, talent_elements
+        )
         session.commit()
         session.refresh(progression)
         return build_progress_snapshot(progression)
@@ -191,18 +201,18 @@ def update_match_progress(
         loser_rating = 1500
 
         if winner_progress:
-            winner_stats, winner_achievements, winner_talent_ranks, winner_specialization = read_progress_state(winner_progress)
+            winner_stats, winner_achievements, winner_talent_ranks, winner_specialization, winner_talent_elements = read_progress_state(winner_progress)
             winner_previous_achievements = list(winner_achievements)
             winner_rating = int(winner_stats.get("elo_rating", 1500))
         else:
-            winner_stats = winner_achievements = winner_talent_ranks = winner_specialization = winner_previous_achievements = None
+            winner_stats = winner_achievements = winner_talent_ranks = winner_specialization = winner_previous_achievements = winner_talent_elements = None
 
         if loser_progress:
-            loser_stats, loser_achievements, loser_talent_ranks, loser_specialization = read_progress_state(loser_progress)
+            loser_stats, loser_achievements, loser_talent_ranks, loser_specialization, loser_talent_elements = read_progress_state(loser_progress)
             loser_previous_achievements = list(loser_achievements)
             loser_rating = int(loser_stats.get("elo_rating", 1500))
         else:
-            loser_stats = loser_achievements = loser_talent_ranks = loser_specialization = loser_previous_achievements = None
+            loser_stats = loser_achievements = loser_talent_ranks = loser_specialization = loser_previous_achievements = loser_talent_elements = None
 
         winner_delta = calculate_elo_delta(winner_rating, loser_rating, 1.0)
         loser_delta = calculate_elo_delta(loser_rating, winner_rating, 0.0)
@@ -227,6 +237,7 @@ def update_match_progress(
                 winner_achievements,
                 winner_talent_ranks,
                 winner_specialization,
+                winner_talent_elements,
             )
 
         if loser_progress:
@@ -247,6 +258,7 @@ def update_match_progress(
                 loser_achievements,
                 loser_talent_ranks,
                 loser_specialization,
+                loser_talent_elements,
             )
 
         session.commit()
@@ -287,9 +299,9 @@ def get_player_talent_bonuses(email: str | None) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        _, _, talent_ranks, _ = read_progress_state(progression)
+        _, _, talent_ranks, _, talent_elements = read_progress_state(progression)
         session.commit()
-        return compute_talent_bonuses(talent_ranks)
+        return compute_talent_bonuses(talent_ranks, talent_elements)
     except Exception:
         session.rollback()
         return {}
@@ -310,11 +322,11 @@ def get_player_account_state(email: str | None) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        stats, _, talent_ranks, _ = read_progress_state(progression)
+        stats, _, talent_ranks, _, talent_elements = read_progress_state(progression)
         level = level_from_experience(int(stats.get("experience_total", 0)))
         session.commit()
         return {
-            "talent_bonuses": compute_talent_bonuses(talent_ranks),
+            "talent_bonuses": compute_talent_bonuses(talent_ranks, talent_elements),
             "level": level,
             "level_rewards": unlocked_level_reward_ids(level),
             "level_reward_bonuses": compute_level_reward_bonuses(unlocked_level_reward_ids(level)),
@@ -479,22 +491,79 @@ def get_meta_progress(email: str):
 
 
 @app.post("/meta/{email}/talents/{talent_id}")
-def unlock_talent(email: str, talent_id: str):
+def unlock_talent(email: str, talent_id: str, element: str | None = None):
     decoded_email = decode_email(email)
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, decoded_email)
-        stats, achievements, talent_ranks, specialization = read_progress_state(progression)
+        stats, achievements, talent_ranks, specialization, talent_elements = read_progress_state(
+            progression
+        )
         can_unlock, error = can_unlock_talent(talent_id, achievements, talent_ranks, specialization)
         if not can_unlock:
             return {"error": error or "Unable to unlock talent"}
 
+        talent_definition = get_talent_definition(talent_id)
+        selected_element = normalize_talent_element(element)
+        if talent_definition and talent_definition.get("elemental_choice"):
+            talent_elements[talent_id] = selected_element or talent_elements.get(talent_id) or "Fire"
+
         if not specialization:
-            talent_definition = get_talent_definition(talent_id)
             specialization = talent_definition["specialization"] if talent_definition else None
         talent_ranks[talent_id] = int(talent_ranks.get(talent_id, 0)) + 1
         achievements = evaluate_achievements(stats, achievements)
-        save_progress_state(progression, stats, achievements, talent_ranks, specialization)
+        save_progress_state(
+            progression, stats, achievements, talent_ranks, specialization, talent_elements
+        )
+        session.commit()
+        session.refresh(progression)
+        return build_progress_snapshot(progression)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+@app.post("/meta/{email}/talents/{talent_id}/element")
+def set_talent_element(email: str, talent_id: str, element: str):
+    decoded_email = decode_email(email)
+    normalized_element = normalize_talent_element(element)
+    if not normalized_element:
+        return {"error": "Invalid element"}
+
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, decoded_email)
+        stats, achievements, talent_ranks, specialization, talent_elements = read_progress_state(
+            progression
+        )
+        talent_definition = get_talent_definition(talent_id)
+        if not talent_definition or not talent_definition.get("elemental_choice"):
+            return {"error": "Talent does not support elemental selection"}
+
+        talent_elements[talent_id] = normalized_element
+        save_progress_state(
+            progression, stats, achievements, talent_ranks, specialization, talent_elements
+        )
+        session.commit()
+        session.refresh(progression)
+        return build_progress_snapshot(progression)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+@app.post("/meta/{email}/talents/reset")
+def reset_talents(email: str):
+    decoded_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, decoded_email)
+        stats, achievements, _, _, _ = read_progress_state(progression)
+        save_progress_state(progression, stats, achievements, {}, None, {})
         session.commit()
         session.refresh(progression)
         return build_progress_snapshot(progression)
