@@ -243,3 +243,13 @@ def test_shop_reroll_selection_consumes_available_rerolls():
     assert len(rerolled_selection) == 5
     assert game.shop_rerolls_remaining["alice"] == 0
     assert game.reroll_shop_selection("alice") == {"error": "No rerolls remaining"}
+
+
+def test_talent_shop_reroll_bonus_is_applied_to_initial_shop_rerolls():
+    game = Game()
+    game.add_player("alice", talent_bonuses={"shop_rerolls_flat": 1})
+    game.add_player("bob")
+    game.shop_bonus_reroll_player_id = "bob"
+
+    assert game.get_initial_shop_rerolls("alice") == 1
+    assert game.get_initial_shop_rerolls("bob") == 1

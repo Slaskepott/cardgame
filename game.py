@@ -282,7 +282,7 @@ class Game:
         return player_ids[starter_index:] + player_ids[:starter_index]
 
     def get_initial_shop_rerolls(self, player_id: str) -> int:
-        rerolls = 0
+        rerolls = int(getattr(self.players.get(player_id), "shop_rerolls_flat", 0))
         if player_id == self.shop_bonus_reroll_player_id:
             rerolls += 1
         return rerolls

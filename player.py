@@ -54,6 +54,7 @@ class Player:
         self.flush_damage_modifier = 1.0
         self.full_house_damage_modifier = 1.0
         self.gold_gain_flat = 0
+        self.shop_rerolls_flat = 0
         self.damage_taken_multiplier = 1.0
         self.plasma_bonus_value = 0
         self.apply_upgrades()
@@ -156,6 +157,7 @@ class Player:
         self.flush_damage_modifier = 1.0 + (self.talent_bonuses.get("flush_damage_pct", 0) / 100.0)
         self.full_house_damage_modifier = 1.0 + (self.talent_bonuses.get("full_house_damage_pct", 0) / 100.0)
         self.gold_gain_flat = int(self.talent_bonuses.get("gold_gain_flat", 0))
+        self.shop_rerolls_flat = int(self.talent_bonuses.get("shop_rerolls_flat", 0))
         self.damage_taken_multiplier = max(
             0.1,
             1.0 + (self.talent_bonuses.get("damage_taken_pct", 0) / 100.0),
