@@ -724,6 +724,8 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     }
     await websocket.send_json(hand_message)
     await websocket.send_json(game.serialize_match_state())
+    for game_player in game.players.values():
+        await websocket.send_json(game_player.apply_upgrades())
     print(f"Sent hand to {player_id} via WebSocket: {player.hand}")
 
     if player.account_email:
@@ -858,7 +860,11 @@ async def play_hand(game_id: str, request: dict):
 
     # Calculate damage
     damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
-    actual_damage = max(0, int(round(damage * opponent.damage_taken_multiplier)))
+    armor_reduction = opponent.get_armor_damage_reduction()
+    actual_damage = max(
+        0,
+        int(round(damage * opponent.damage_taken_multiplier * (1.0 - armor_reduction))),
+    )
     stat_changes = summarize_played_hand(selected_cards, hand_type)
     stat_changes["damage_dealt"] = actual_damage
 

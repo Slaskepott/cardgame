@@ -22,6 +22,7 @@ class Player:
         self.level_reward_bonuses = level_reward_bonuses or {}
         self.max_health = 100
         self.health = self.max_health
+        self.armor = 0
         self.wins = 0
         self.hand: List[Card] = []
         self.special_deck: List[Card] = []
@@ -47,6 +48,7 @@ class Player:
         self.high_card_draw_modifier = 1.0
         self.royal_draw_modifier = 1.0
         self.tiny_draw_modifier = 1.0
+        self.joker_draw_modifier = 1.0
         self.pair_damage_modifier = 1.0
         self.straight_damage_modifier = 1.0
         self.flush_damage_modifier = 1.0
@@ -81,7 +83,11 @@ class Player:
         special_cards: List[Card] = []
 
         if "joker" in self.level_unlocks:
-            special_cards.append(Card("Joker", "Wild"))
+            special_cards.extend([
+                Card("Joker", "Wild"),
+                Card("Joker", "Wild"),
+                Card("Joker", "Wild"),
+            ])
 
         if "flame" in self.level_unlocks:
             special_cards.append(Card("Flame", "Fire"))
@@ -105,6 +111,7 @@ class Player:
 
     def apply_upgrades(self):
         self.max_health = 100
+        self.armor = 0
         self.max_discards = 1
         self.hand_size = 8
         self.damage_modifier = 1.0 + (
@@ -113,6 +120,8 @@ class Player:
         )
         self.max_health += int(self.talent_bonuses.get("health_flat", 0))
         self.max_health += int(self.level_reward_bonuses.get("health_flat", 0))
+        self.armor += int(self.talent_bonuses.get("armor_flat", 0))
+        self.armor += int(self.level_reward_bonuses.get("armor_flat", 0))
         self.water_damage_modifier = 1.0 + (self.talent_bonuses.get("water_damage_pct", 0) / 100.0)
         self.fire_damage_modifier = 1.0 + (self.talent_bonuses.get("fire_damage_pct", 0) / 100.0)
         self.air_damage_modifier = 1.0 + (self.talent_bonuses.get("air_damage_pct", 0) / 100.0)
@@ -141,6 +150,7 @@ class Player:
         self.high_card_draw_modifier = 1.0 + (self.talent_bonuses.get("high_card_draw_pct", 0) / 100.0)
         self.royal_draw_modifier = 1.0 + (self.talent_bonuses.get("royal_draw_pct", 0) / 100.0)
         self.tiny_draw_modifier = 1.0 + (self.talent_bonuses.get("tiny_draw_pct", 0) / 100.0)
+        self.joker_draw_modifier = 1.0 + (self.talent_bonuses.get("joker_draw_pct", 0) / 100.0)
         self.pair_damage_modifier = 1.0 + (self.talent_bonuses.get("pair_damage_pct", 0) / 100.0)
         self.straight_damage_modifier = 1.0 + (self.talent_bonuses.get("straight_damage_pct", 0) / 100.0)
         self.flush_damage_modifier = 1.0 + (self.talent_bonuses.get("flush_damage_pct", 0) / 100.0)
@@ -163,6 +173,8 @@ class Player:
         for upgrade in self.upgrades:
             if upgrade.name == "Increase Health":
                 self.max_health += int(upgrade.effect.split()[0])
+            elif upgrade.name == "Increase Armor":
+                self.armor += int(upgrade.effect.split()[0])
             elif upgrade.name == "Increase Health %":
                 health_percentage_bonus += int(upgrade.effect.split("%")[0]) / 100.0
             elif upgrade.name == "Increase Discards":
@@ -208,13 +220,18 @@ class Player:
             "health": self.health,
             "max_health": self.max_health,
             "max_discards": self.max_discards,
+            "armor": self.armor,
+            "armor_reduction_pct": self.get_armor_damage_reduction_pct(),
+            "upgrades": [upgrade.to_dict() for upgrade in self.upgrades],
         }
 
     def get_draw_weight(self, card: Card) -> float:
         suit_modifier = getattr(self, f"{card.suit.lower()}_draw_modifier", 1.0)
         rank_modifier = 1.0
 
-        if card.rank in {"Joker", "Flame"}:
+        if card.rank == "Joker":
+            return max(0.01, self.joker_draw_modifier)
+        if card.rank == "Flame":
             return 1.0
         if card.rank in {"2", "3"}:
             rank_modifier *= self.tiny_draw_modifier
@@ -226,3 +243,13 @@ class Player:
             rank_modifier *= self.high_card_draw_modifier
 
         return max(0.01, suit_modifier * rank_modifier)
+
+    def get_armor_damage_reduction(self) -> float:
+        if self.armor <= 0:
+            return 0.0
+
+        scaled_armor = float(self.armor) ** 0.9
+        return scaled_armor / (scaled_armor + 120.0)
+
+    def get_armor_damage_reduction_pct(self) -> int:
+        return int(round(self.get_armor_damage_reduction() * 100))

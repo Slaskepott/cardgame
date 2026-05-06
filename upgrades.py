@@ -58,6 +58,13 @@ class UpgradeStore:
         self.add_upgrade(4, "Increase Health %", 1, "common", "+25% HP", 4)
         self.add_upgrade(5, "Increase Health %", 2, "uncommon", "+50% HP", 8)
 
+        # Increase Armor
+        self.add_upgrade(90, "Increase Armor", 1, "common", "+10 Armor", 4)
+        self.add_upgrade(91, "Increase Armor", 2, "uncommon", "+18 Armor", 7)
+        self.add_upgrade(92, "Increase Armor", 3, "rare", "+28 Armor", 11)
+        self.add_upgrade(93, "Increase Armor", 4, "epic", "+42 Armor", 16)
+        self.add_upgrade(94, "Increase Armor", 5, "legendary", "+60 Armor", 23)
+
         # Increase Discards
         self.add_upgrade(6, "Increase Discards", 1, "common", "+1 Discard", 6)
         self.add_upgrade(7, "Increase Discards", 2, "rare", "+2 Discards", 12)
