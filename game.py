@@ -44,6 +44,7 @@ HAND_MULTIPLIERS = {
     "royal flush": 10,
     "five of a kind": 8,
 }
+RANK_COMPRESSION_FACTOR = 2.0
 
 
 class Game:
@@ -281,10 +282,14 @@ class Game:
         return player_ids[starter_index:] + player_ids[:starter_index]
 
     def get_initial_shop_rerolls(self, player_id: str) -> int:
-        rerolls = 1
+        rerolls = 0
         if player_id == self.shop_bonus_reroll_player_id:
             rerolls += 1
         return rerolls
+
+    def get_compressed_rank_value(self, rank: int) -> float:
+        midpoint = 8
+        return midpoint + (rank - midpoint) / RANK_COMPRESSION_FACTOR
 
     def reroll_shop_selection(self, player_id: str) -> list[dict] | dict:
         rerolls_remaining = self.shop_rerolls_remaining.get(player_id, 0)
@@ -436,7 +441,8 @@ class Game:
                 rank_modifier *= player.high_card_damage_modifier
 
             total_modifier = modifier_dict.get(suit, 1.0) * player.damage_modifier * rank_modifier
-            damage_rank = rank + (player.plasma_bonus_value if suit == "Plasma" else 0)
+            compressed_rank = self.get_compressed_rank_value(rank)
+            damage_rank = compressed_rank + (player.plasma_bonus_value if suit == "Plasma" else 0)
             base_values.append(damage_rank * total_modifier)
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)

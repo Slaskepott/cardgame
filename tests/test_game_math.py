@@ -118,7 +118,7 @@ def test_calculate_damage_applies_damage_and_elemental_modifiers():
 
     assert hand_type == "royal flush"
     assert multiplier == 10
-    assert damage == 180
+    assert damage == 150
 
 
 def test_calculate_damage_applies_low_card_and_pair_modifiers():
@@ -144,7 +144,7 @@ def test_calculate_damage_applies_low_card_and_pair_modifiers():
 
     assert hand_type == "pair"
     assert multiplier == 2
-    assert damage == 15
+    assert damage == 20
 
 
 def test_joker_resolves_to_best_possible_five_of_a_kind():
@@ -164,7 +164,7 @@ def test_joker_resolves_to_best_possible_five_of_a_kind():
 
     assert hand_type == "five of a kind"
     assert multiplier == 8
-    assert damage == 112
+    assert damage == 88
 
 
 def test_flame_resolves_to_royal_flush_when_possible():
@@ -184,7 +184,7 @@ def test_flame_resolves_to_royal_flush_when_possible():
 
     assert hand_type == "royal flush"
     assert multiplier == 10
-    assert damage == 120
+    assert damage == 100
 
 
 def test_flush_house_gets_both_flush_and_full_house_modifiers():
@@ -210,7 +210,7 @@ def test_flush_house_gets_both_flush_and_full_house_modifiers():
 
     assert hand_type == "flush house"
     assert multiplier == 9
-    assert damage == 162
+    assert damage == 146
 
 
 def test_reset_game_rotates_starter_and_awards_bonus_reroll_to_previous_second_player(monkeypatch):
@@ -225,11 +225,11 @@ def test_reset_game_rotates_starter_and_awards_bonus_reroll_to_previous_second_p
 
     asyncio.run(game.reset_game())
     assert game.get_current_player_id() == "bob"
-    assert game.shop_rerolls_remaining == {"alice": 1, "bob": 2}
+    assert game.shop_rerolls_remaining == {"alice": 0, "bob": 1}
 
     asyncio.run(game.reset_game())
     assert game.get_current_player_id() == "alice"
-    assert game.shop_rerolls_remaining == {"alice": 2, "bob": 1}
+    assert game.shop_rerolls_remaining == {"alice": 1, "bob": 0}
 
 
 def test_shop_reroll_selection_consumes_available_rerolls():
