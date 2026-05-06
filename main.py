@@ -587,7 +587,7 @@ def get_players(game_id: str):
     
     game = games[game_id]
     players = list(game.players.keys())
-    next_player = players[game.turn_index] if players else None
+    next_player = game.get_current_player_id()
     avatars = {player.name: player.avatar for player in game.players.values()}
     return {
         "players": players,
@@ -671,14 +671,14 @@ async def leave_game(game_id: str, player_id: str):
     await game.broadcast({
         "type": "players_updated",
         "players": list(game.players.keys()),
-        "next_player": list(game.players.keys())[game.turn_index],
+        "next_player": game.get_current_player_id(),
         "avatars": {player.name: player.avatar for player in game.players.values()},
     })
     await game.broadcast_shop_status()
     await game.broadcast_match_state()
 
     remaining_players = list(game.players.keys())
-    next_player = remaining_players[game.turn_index] if remaining_players else None
+    next_player = game.get_current_player_id()
 
     return {
         "message": f"{player_id} left game {game_id}",
@@ -719,7 +719,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         "type": "new_hand",
         "player": player_id,
         "cards": [{"rank": c.rank, "suit": c.suit} for c in player.hand],
-        "next_player": list(game.players.keys())[game.turn_index],
+        "next_player": game.get_current_player_id(),
         "remaining_discards": player.remaining_discards,
     }
     await websocket.send_json(hand_message)
@@ -874,13 +874,13 @@ async def play_hand(game_id: str, request: dict):
     # Check for win condition
     winner = None
     match_finished = False
+    round_finished = False
     if opponent.health == 0:
         winner = player_id
+        round_finished = True
         player.wins += 1
         if player.wins >= 5:
             match_finished = True
-        else:
-            await game.reset_game()
 
     #Increase discards
     player.remaining_discards = player.max_discards
@@ -905,6 +905,8 @@ async def play_hand(game_id: str, request: dict):
         "new_hand": result["new_hand"],  # ✅ Send updated hand
         "multiplier": multiplier,
         "winner": winner,
+        "round_finished": round_finished,
+        "match_finished": match_finished,
         "remaining_discards": player.remaining_discards,
         "gold": multiplier + player.gold_gain_flat
     })
@@ -919,6 +921,8 @@ async def play_hand(game_id: str, request: dict):
             {**stat_changes, "games_won": 1},
             {"games_lost": 1},
         )
+    else:
+        await game.reset_game()
 
     if not winner and player.account_email:
         update_player_progress(player.account_email, stat_changes)
@@ -928,7 +932,9 @@ async def play_hand(game_id: str, request: dict):
         "damage": actual_damage,
         "multiplier": multiplier,
         "new_hand": result["new_hand"],  # ✅ Send updated hand
-        "winner": winner
+        "winner": winner,
+        "round_finished": round_finished,
+        "match_finished": match_finished,
     }
 
 @app.post("/game/{game_id}/end_turn")
@@ -993,6 +999,33 @@ async def add_upgrade(gameId: str, playerId: str, upgrade_id: str):
             "message": f"{playerId} bought upgrade {upgrade_id}",
             "price": price,
         }
+
+
+@app.post("/game/{game_id}/shop/reroll")
+async def reroll_shop(game_id: str, player_id: str):
+    if game_id not in games:
+        return {"error": "Game not found"}
+
+    game = games[game_id]
+    if player_id not in game.players:
+        return {"error": "Player not found"}
+
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "shop":
+        return {"error": "Shop is not open"}
+
+    rerolled_selection = game.reroll_shop_selection(player_id)
+    if isinstance(rerolled_selection, dict) and rerolled_selection.get("error"):
+        return rerolled_selection
+
+    return {
+        "message": "Shop rerolled",
+        "upgrades": rerolled_selection,
+        "rerolls_remaining": game.shop_rerolls_remaining.get(player_id, 0),
+    }
 
 
 @app.post("/game/{game_id}/shop/continue")

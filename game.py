@@ -38,9 +38,11 @@ HAND_MULTIPLIERS = {
     "straight": 4,
     "flush": 4,
     "full house": 4,
+    "flush house": 9,
     "four of a kind": 7,
     "straight flush": 8,
     "royal flush": 10,
+    "five of a kind": 8,
 }
 
 
@@ -48,9 +50,12 @@ class Game:
     def __init__(self):
         self.players: Dict[str, Player] = {}
         self.turn_index: int = 0
+        self.round_starter_index: int = 0
+        self.shop_bonus_reroll_player_id: str | None = None
         self.websocket_connections: Dict[str, WebSocket] = {}
         self.shop_waiting_players: set[str] = set()
         self.shop_deadlines: dict[str, float] = {}
+        self.shop_rerolls_remaining: dict[str, int] = {}
         self.last_activity: dict[str, float] = {}
         self.phase: str = "waiting"
         self.battle_deadline_at: float | None = None
@@ -103,12 +108,16 @@ class Game:
         self.websocket_connections.pop(player_name, None)
         self.shop_waiting_players.discard(player_name)
         self.shop_deadlines.pop(player_name, None)
+        self.shop_rerolls_remaining.pop(player_name, None)
         self.last_activity.pop(player_name, None)
 
         if self.players:
             self.turn_index %= len(self.players)
+            self.round_starter_index %= len(self.players)
         else:
             self.turn_index = 0
+            self.round_starter_index = 0
+            self.shop_bonus_reroll_player_id = None
             self.phase = "waiting"
             self.battle_deadline_at = None
 
@@ -133,6 +142,7 @@ class Game:
         self.battle_deadline_at = None
         self.shop_waiting_players = set()
         self.shop_deadlines = {}
+        self.shop_rerolls_remaining = {}
 
     def start_battle_phase(self):
         if len(self.players) < 2:
@@ -143,6 +153,7 @@ class Game:
         self.battle_deadline_at = time.time() + 60
         self.shop_waiting_players = set()
         self.shop_deadlines = {}
+        self.shop_rerolls_remaining = {}
 
     def start_shop_phase(self):
         if len(self.players) < 2:
@@ -154,6 +165,10 @@ class Game:
         deadline = time.time() + 120
         self.shop_waiting_players = set(self.players.keys())
         self.shop_deadlines = {player_name: deadline for player_name in self.players.keys()}
+        self.shop_rerolls_remaining = {
+            player_name: self.get_initial_shop_rerolls(player_name)
+            for player_name in self.players.keys()
+        }
 
     def set_match_over(self, winner_id: str, reason: str):
         self.phase = "match_over"
@@ -162,6 +177,7 @@ class Game:
         self.battle_deadline_at = None
         self.shop_waiting_players = set()
         self.shop_deadlines = {}
+        self.shop_rerolls_remaining = {}
 
     def serialize_match_state(self) -> dict:
         return {
@@ -230,7 +246,13 @@ class Game:
         for player in self.players.values():
             player.reset()
 
-        self.turn_index = 0
+        if self.players:
+            finished_round_order = self.get_round_order()
+            self.shop_bonus_reroll_player_id = (
+                finished_round_order[1] if len(finished_round_order) > 1 else None
+            )
+            self.round_starter_index = (self.round_starter_index + 1) % len(self.players)
+            self.turn_index = self.round_starter_index
         await self.open_upgrade_store()
 
     def get_shop_waiting_players(self) -> list[str]:
@@ -250,6 +272,29 @@ class Game:
             self.start_battle_phase()
             await self.broadcast_match_state()
 
+    def get_round_order(self) -> list[str]:
+        player_ids = list(self.players.keys())
+        if not player_ids:
+            return []
+
+        starter_index = self.round_starter_index % len(player_ids)
+        return player_ids[starter_index:] + player_ids[:starter_index]
+
+    def get_initial_shop_rerolls(self, player_id: str) -> int:
+        rerolls = 1
+        if player_id == self.shop_bonus_reroll_player_id:
+            rerolls += 1
+        return rerolls
+
+    def reroll_shop_selection(self, player_id: str) -> list[dict] | dict:
+        rerolls_remaining = self.shop_rerolls_remaining.get(player_id, 0)
+        if rerolls_remaining < 1:
+            return {"error": "No rerolls remaining"}
+
+        self.shop_rerolls_remaining[player_id] = rerolls_remaining - 1
+        store_selection = self.upgrade_store.get_selection_of_upgrades()
+        return [upgrade.to_dict() for upgrade in store_selection]
+
     async def open_upgrade_store(self):
         self.start_shop_phase()
         for player_id, ws in self.websocket_connections.items():
@@ -262,6 +307,7 @@ class Game:
                     "player": player_id,
                     "upgrades": serialized_upgrades,
                     "waiting_players": self.get_shop_waiting_players(),
+                    "rerolls_remaining": self.shop_rerolls_remaining.get(player_id, 0),
                 })
             except Exception as error:
                 print(f"Failed to send store selection to {player_id}: {error}")
@@ -413,6 +459,10 @@ class Game:
             hand_type = "royal flush"
         elif is_straight and is_flush:
             hand_type = "straight flush"
+        elif 5 in rank_frequencies:
+            hand_type = "five of a kind"
+        elif is_flush and 3 in rank_frequencies and 2 in rank_frequencies:
+            hand_type = "flush house"
         elif 4 in rank_frequencies:
             hand_type = "four of a kind"
         elif 3 in rank_frequencies and 2 in rank_frequencies:
@@ -436,9 +486,9 @@ class Game:
             hand_type_modifier *= player.pair_damage_modifier
         if hand_type in {"straight", "straight flush", "royal flush"}:
             hand_type_modifier *= player.straight_damage_modifier
-        if hand_type in {"flush", "straight flush", "royal flush"}:
+        if hand_type in {"flush", "flush house", "straight flush", "royal flush"}:
             hand_type_modifier *= player.flush_damage_modifier
-        if hand_type in {"three of a kind", "full house"}:
+        if hand_type in {"three of a kind", "full house", "flush house"}:
             hand_type_modifier *= player.full_house_damage_modifier
 
         base_damage = sum(base_values) // max(1, len(base_values))
