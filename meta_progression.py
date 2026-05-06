@@ -205,7 +205,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 3,
         "requires": [],
         "row": 0,
-        "column": 1,
+        "column": 2,
         "bonuses": {"damage_pct": 3},
     },
     {
@@ -241,7 +241,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["offense_root"],
         "row": 1,
-        "column": 2,
+        "column": 3,
         "bonuses": {"earth_damage_pct": 5, "earth_draw_pct": 9},
     },
     {
@@ -253,7 +253,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["offense_root"],
         "row": 1,
-        "column": 3,
+        "column": 4,
         "bonuses": {"water_damage_pct": 5, "water_draw_pct": 9},
     },
     {
@@ -265,7 +265,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["offense_gale_edge"],
         "row": 3,
-        "column": 0,
+        "column": 1,
         "bonuses": {"royal_draw_pct": 10},
     },
     {
@@ -301,7 +301,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["offense_stonefist"],
         "row": 2,
-        "column": 2,
+        "column": 3,
         "bonuses": {"low_card_damage_pct": 6, "low_card_draw_pct": 9},
     },
     {
@@ -313,7 +313,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["offense_tide_lash"],
         "row": 2,
-        "column": 3,
+        "column": 4,
         "bonuses": {"straight_damage_pct": 12},
     },
     {
@@ -325,7 +325,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["offense_heavens_ladder"],
         "row": 3,
-        "column": 1,
+        "column": 3,
         "bonuses": {"flush_damage_pct": 12},
     },
     {
@@ -337,7 +337,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 1,
         "requires": ["offense_killing_rhythm", "offense_primal_weight"],
         "row": 3,
-        "column": 2,
+        "column": 4,
         "bonuses": {"damage_pct": 18, "damage_taken_pct": 10},
     },
     {
@@ -366,7 +366,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 3,
         "requires": [],
         "row": 0,
-        "column": 1,
+        "column": 2,
         "bonuses": {"health_pct": 6},
     },
     {
@@ -402,7 +402,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["defense_root"],
         "row": 1,
-        "column": 2,
+        "column": 3,
         "bonuses": {"armor_flat": 6, "earth_draw_pct": 8},
     },
     {
@@ -414,7 +414,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["defense_root"],
         "row": 1,
-        "column": 3,
+        "column": 4,
         "bonuses": {"armor_flat": 6, "water_draw_pct": 8},
     },
     {
@@ -425,7 +425,7 @@ TALENT_DEFINITIONS = [
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_ember_guard"],
-        "row": 1,
+        "row": 2,
         "column": 0,
         "bonuses": {"health_flat": 30},
     },
@@ -462,7 +462,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["defense_stone_guard"],
         "row": 2,
-        "column": 2,
+        "column": 3,
         "bonuses": {"armor_flat": 10},
     },
     {
@@ -474,7 +474,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["defense_stone_lungs"],
         "row": 2,
-        "column": 0,
+        "column": 2,
         "bonuses": {"health_pct": 9, "armor_flat": 8},
     },
     {
@@ -486,7 +486,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["defense_iron_wall"],
         "row": 2,
-        "column": 3,
+        "column": 4,
         "bonuses": {"full_house_damage_pct": 12},
     },
     {
@@ -497,7 +497,7 @@ TALENT_DEFINITIONS = [
         "cost": 1,
         "max_ranks": 1,
         "requires": ["defense_tide_guard"],
-        "row": 2,
+        "row": 3,
         "column": 2,
         "bonuses": {"hand_size_flat": 1},
     },
@@ -510,7 +510,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 1,
         "requires": ["defense_warden", "defense_overdraw"],
         "row": 3,
-        "column": 3,
+        "column": 4,
         "bonuses": {"health_pct": 15, "tiny_draw_pct": 18, "armor_flat": 15},
     },
     {
@@ -534,7 +534,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 1,
         "requires": [],
         "row": 0,
-        "column": 1,
+        "column": 2,
         "bonuses": {"max_discards_flat": 1},
     },
     {
@@ -570,7 +570,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["utility_root"],
         "row": 1,
-        "column": 2,
+        "column": 3,
         "bonuses": {"water_damage_pct": 3, "water_draw_pct": 8},
     },
     {
@@ -594,7 +594,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["utility_root"],
         "row": 1,
-        "column": 3,
+        "column": 4,
         "bonuses": {"earth_draw_pct": 10},
     },
     {
@@ -618,7 +618,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["utility_tide_memory"],
         "row": 2,
-        "column": 2,
+        "column": 3,
         "bonuses": {"high_card_damage_pct": 4, "high_card_draw_pct": 8},
     },
     {
@@ -642,7 +642,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["utility_arcane_filter"],
         "row": 2,
-        "column": 3,
+        "column": 4,
         "bonuses": {"royal_draw_pct": 7},
     },
     {
@@ -654,7 +654,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 1,
         "requires": ["utility_smooth_draw", "utility_clever_finish"],
         "row": 3,
-        "column": 1,
+        "column": 2,
         "bonuses": {"tiny_draw_pct": 30},
     },
     {
@@ -666,7 +666,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 4,
         "requires": ["utility_crown_hustle"],
         "row": 3,
-        "column": 2,
+        "column": 4,
         "bonuses": {"joker_draw_pct": 25},
     },
     {
