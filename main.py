@@ -59,6 +59,7 @@ PEAK_STAT_KEYS = {
     "max_armor_in_game",
     "max_health_in_game",
     "max_single_hand_damage",
+    "max_win_health_remaining_pct",
 }
 
 class PlayerCurrency(Base):
@@ -372,11 +373,23 @@ async def finalize_match(
 
     winner_player = game.players.get(winner_id)
     loser_player = game.players.get(loser_id) if loser_id else None
+    if winner_player:
+        winner_health_pct = int(
+            round((winner_player.health / max(1, winner_player.max_health)) * 100)
+        )
+        winner_stat_changes = {
+            **(winner_stat_changes or {"games_won": 1}),
+            "max_win_health_remaining_pct": winner_health_pct,
+        }
+    else:
+        winner_stat_changes = winner_stat_changes or {"games_won": 1}
+
+    loser_stat_changes = loser_stat_changes or {"games_lost": 1}
     progress_result = update_match_progress(
         winner_player.account_email if winner_player else None,
         loser_player.account_email if loser_player else None,
-        winner_stat_changes or {"games_won": 1},
-        loser_stat_changes or {"games_lost": 1},
+        winner_stat_changes,
+        loser_stat_changes,
     )
 
     elo_changes = {}

@@ -305,6 +305,7 @@ def test_peak_stat_achievements_unlock_from_thresholds():
             "max_armor_in_game": 45,
             "max_health_in_game": 210,
             "max_single_hand_damage": 145,
+            "max_win_health_remaining_pct": 92,
         },
         [],
     )
@@ -313,3 +314,4 @@ def test_peak_stat_achievements_unlock_from_thresholds():
     assert "armor_peak_40" in unlocked
     assert "health_peak_200" in unlocked
     assert "single_hand_damage_140" in unlocked
+    assert "wins_healthy_90" in unlocked
