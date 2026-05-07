@@ -337,6 +337,8 @@ def test_start_bot_game_creates_private_match_and_hides_it_from_public_list(monk
     game = games[response["game_id"]]
     assert game.is_bot_match is True
     assert game.public_visibility is False
+    assert len(game.players[response["bot_player_id"]].hand) == game.players[response["bot_player_id"]].hand_size
+    assert game.battle_deadline_at is None
     public_games = list_games()["games"]
     assert response["game_id"] not in {entry["game_id"] for entry in public_games}
 

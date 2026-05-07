@@ -1203,6 +1203,7 @@ def get_players(game_id: str):
         "phase": game.phase,
         "battle_deadline_at": game.battle_deadline_at,
         "shop_deadlines": dict(game.shop_deadlines),
+        "is_bot_match": game.is_bot_match,
     }
 
 @app.post("/game/create/{game_id}")

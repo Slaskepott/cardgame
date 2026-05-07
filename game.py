@@ -172,10 +172,16 @@ class Game:
             return
 
         self.phase = "battle"
-        self.battle_deadline_at = time.time() + 60
+        self.battle_deadline_at = None if self.is_bot_match else time.time() + 60
         self.shop_waiting_players = set()
         self.shop_deadlines = {}
         self.shop_rerolls_remaining = {}
+        for player_id in self.players.keys():
+            player = self.players[player_id]
+            while len(player.hand) < player.hand_size:
+                dealt = self.deal_card(player_id)
+                if isinstance(dealt, dict) and dealt.get("error"):
+                    break
 
     def start_shop_phase(self):
         if len(self.players) < 2:
@@ -184,9 +190,12 @@ class Game:
 
         self.phase = "shop"
         self.battle_deadline_at = None
-        deadline = time.time() + 120
         self.shop_waiting_players = set(self.players.keys())
-        self.shop_deadlines = {player_name: deadline for player_name in self.players.keys()}
+        if self.is_bot_match:
+            self.shop_deadlines = {}
+        else:
+            deadline = time.time() + 120
+            self.shop_deadlines = {player_name: deadline for player_name in self.players.keys()}
         self.shop_rerolls_remaining = {
             player_name: self.get_initial_shop_rerolls(player_name)
             for player_name in self.players.keys()
@@ -214,6 +223,7 @@ class Game:
             "best_of": 9,
             "match_winner": self.match_winner,
             "match_end_reason": self.match_end_reason,
+            "is_bot_match": self.is_bot_match,
         }
 
     async def broadcast_match_state(self):
@@ -239,7 +249,7 @@ class Game:
                         "reason": f"{player_name} went inactive.",
                     }
 
-        if self.phase == "battle" and self.battle_deadline_at and now >= self.battle_deadline_at:
+        if not self.is_bot_match and self.phase == "battle" and self.battle_deadline_at and now >= self.battle_deadline_at:
             timed_out_player = self.get_current_player_id()
             opponent_id = self.get_opponent_id(timed_out_player) if timed_out_player else None
             if timed_out_player and opponent_id:
@@ -249,7 +259,7 @@ class Game:
                     "reason": f"{timed_out_player} ran out of time on their turn.",
                 }
 
-        if self.phase == "shop":
+        if not self.is_bot_match and self.phase == "shop":
             for player_name in self.get_shop_waiting_players():
                 deadline = self.shop_deadlines.get(player_name)
                 if deadline and now >= deadline:
@@ -337,6 +347,8 @@ class Game:
                     "upgrades": serialized_upgrades,
                     "waiting_players": self.get_shop_waiting_players(),
                     "rerolls_remaining": self.shop_rerolls_remaining.get(player_id, 0),
+                    "health_update": {player.name: player.health for player in self.players.values()},
+                    "max_health_update": {player.name: player.max_health for player in self.players.values()},
                 })
             except Exception as error:
                 print(f"Failed to send store selection to {player_id}: {error}")
