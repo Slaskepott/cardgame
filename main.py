@@ -54,6 +54,13 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+PEAK_STAT_KEYS = {
+    "elo_rating",
+    "max_armor_in_game",
+    "max_health_in_game",
+    "max_single_hand_damage",
+}
+
 class PlayerCurrency(Base):
     __tablename__ = "player_currencies"
     email = Column(String, primary_key=True, index=True)
@@ -141,7 +148,10 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
         )
         previous_achievements = list(achievements)
         for key, amount in stat_changes.items():
-            stats[key] = int(stats.get(key, 0)) + int(amount)
+            if key in PEAK_STAT_KEYS:
+                stats[key] = max(int(stats.get(key, 0)), int(amount))
+            else:
+                stats[key] = int(stats.get(key, 0)) + int(amount)
         achievements = evaluate_achievements(stats, achievements)
         experience_gain = calculate_experience_gain(stat_changes, previous_achievements, achievements)
         if experience_gain > 0:
@@ -221,7 +231,10 @@ def update_match_progress(
 
         if winner_progress:
             for key, amount in winner_stat_changes.items():
-                winner_stats[key] = int(winner_stats.get(key, 0)) + int(amount)
+                if key in PEAK_STAT_KEYS:
+                    winner_stats[key] = max(int(winner_stats.get(key, 0)), int(amount))
+                else:
+                    winner_stats[key] = int(winner_stats.get(key, 0)) + int(amount)
             winner_stats["elo_rating"] = winner_after_rating
             winner_achievements = evaluate_achievements(winner_stats, winner_achievements)
             winner_xp_gain = calculate_experience_gain(
@@ -242,7 +255,10 @@ def update_match_progress(
 
         if loser_progress:
             for key, amount in loser_stat_changes.items():
-                loser_stats[key] = int(loser_stats.get(key, 0)) + int(amount)
+                if key in PEAK_STAT_KEYS:
+                    loser_stats[key] = max(int(loser_stats.get(key, 0)), int(amount))
+                else:
+                    loser_stats[key] = int(loser_stats.get(key, 0)) + int(amount)
             loser_stats["elo_rating"] = loser_after_rating
             loser_achievements = evaluate_achievements(loser_stats, loser_achievements)
             loser_xp_gain = calculate_experience_gain(
@@ -639,6 +655,13 @@ def summarize_drawn_hand(cards: list[dict]) -> dict[str, int]:
 
     return {}
 
+
+def summarize_player_peaks(player) -> dict[str, int]:
+    return {
+        "max_armor_in_game": int(getattr(player, "armor", 0)),
+        "max_health_in_game": int(getattr(player, "max_health", 0)),
+    }
+
 @app.get("/games")
 def list_games():
     return {
@@ -797,13 +820,17 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
     await websocket.send_json(hand_message)
     await websocket.send_json(game.serialize_match_state())
     for game_player in game.players.values():
-        await websocket.send_json(game_player.apply_upgrades())
+        upgrade_payload = game_player.apply_upgrades()
+        await websocket.send_json(upgrade_payload)
     print(f"Sent hand to {player_id} via WebSocket: {player.hand}")
 
     if player.account_email:
         update_player_progress(
             player.account_email,
-            summarize_drawn_hand(hand_message["cards"]),
+            {
+                **summarize_drawn_hand(hand_message["cards"]),
+                **summarize_player_peaks(player),
+            },
         )
 
     try:
@@ -887,7 +914,11 @@ async def discard(game_id: str, request: dict):
         draw_stats = summarize_drawn_hand(result["new_hand"])
         update_player_progress(
             player.account_email,
-            {"cards_discarded": len(result["discarded"]), **draw_stats},
+            {
+                "cards_discarded": len(result["discarded"]),
+                **draw_stats,
+                **summarize_player_peaks(player),
+            },
         )
 
     return {
@@ -939,6 +970,7 @@ async def play_hand(game_id: str, request: dict):
     )
     stat_changes = summarize_played_hand(selected_cards, hand_type)
     stat_changes["damage_dealt"] = actual_damage
+    stat_changes["max_single_hand_damage"] = actual_damage
 
     # Remove played cards
     result = game.remove_selected_cards(player_id, selected_cards)
@@ -1003,7 +1035,10 @@ async def play_hand(game_id: str, request: dict):
         await game.reset_game()
 
     if not winner and player.account_email:
-        update_player_progress(player.account_email, stat_changes)
+        update_player_progress(
+            player.account_email,
+            {**stat_changes, **summarize_player_peaks(player)},
+        )
 
     return {
         "message": f"{player_id} played a hand",
@@ -1072,7 +1107,10 @@ async def add_upgrade(gameId: str, playerId: str, upgrade_id: str):
         await game.add_upgrade(playerId, upgrade_id)
         await game.apply_upgrades(playerId)
         if player.account_email:
-            update_player_progress(player.account_email, {"upgrades_bought": 1})
+            update_player_progress(
+                player.account_email,
+                {"upgrades_bought": 1, **summarize_player_peaks(player)},
+            )
         return {
             "message": f"{playerId} bought upgrade {upgrade_id}",
             "price": price,
@@ -1098,6 +1136,10 @@ async def reroll_shop(game_id: str, player_id: str):
     rerolled_selection = game.reroll_shop_selection(player_id)
     if isinstance(rerolled_selection, dict) and rerolled_selection.get("error"):
         return rerolled_selection
+
+    player = game.players.get(player_id)
+    if player and player.account_email:
+        update_player_progress(player.account_email, {"shop_rerolls_used": 1})
 
     return {
         "message": "Shop rerolled",

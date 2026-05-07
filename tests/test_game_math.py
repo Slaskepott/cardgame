@@ -5,9 +5,10 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from card import Card
 from game import Game
-from main import summarize_drawn_hand
+from main import summarize_drawn_hand, summarize_player_peaks
 from player import Player
 from upgrades import Upgrade
+from meta_progression import evaluate_achievements
 
 
 def make_upgrade(name: str, effect: str) -> Upgrade:
@@ -287,3 +288,28 @@ def test_summarize_drawn_hand_ignores_four_of_a_rank():
     ]
 
     assert summarize_drawn_hand(hand) == {}
+
+
+def test_summarize_player_peaks_uses_current_armor_and_max_health():
+    player = Player("tester", talent_bonuses={"armor_flat": 12, "health_flat": 25})
+    peaks = summarize_player_peaks(player)
+
+    assert peaks["max_armor_in_game"] == player.armor
+    assert peaks["max_health_in_game"] == player.max_health
+
+
+def test_peak_stat_achievements_unlock_from_thresholds():
+    unlocked = evaluate_achievements(
+        {
+            "shop_rerolls_used": 6,
+            "max_armor_in_game": 45,
+            "max_health_in_game": 210,
+            "max_single_hand_damage": 145,
+        },
+        [],
+    )
+
+    assert "shop_rerolls_5" in unlocked
+    assert "armor_peak_40" in unlocked
+    assert "health_peak_200" in unlocked
+    assert "single_hand_damage_140" in unlocked
