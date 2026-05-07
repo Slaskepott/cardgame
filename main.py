@@ -1,8 +1,13 @@
+import asyncio
+import itertools
+import random
+import re
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict
-from game import Game
+from game import Game, HAND_MULTIPLIERS, RANK_VALUES
 import stripe
 import os
 import urllib.parse
@@ -385,12 +390,14 @@ async def finalize_match(
         winner_stat_changes = winner_stat_changes or {"games_won": 1}
 
     loser_stat_changes = loser_stat_changes or {"games_lost": 1}
-    progress_result = update_match_progress(
-        winner_player.account_email if winner_player else None,
-        loser_player.account_email if loser_player else None,
-        winner_stat_changes,
-        loser_stat_changes,
-    )
+    progress_result = None
+    if should_track_progress(game):
+        progress_result = update_match_progress(
+            winner_player.account_email if winner_player else None,
+            loser_player.account_email if loser_player else None,
+            winner_stat_changes,
+            loser_stat_changes,
+        )
 
     elo_changes = {}
     for player_id, role in ((winner_id, "winner"), (loser_id, "loser")):
@@ -411,6 +418,8 @@ async def finalize_match(
         "scores": {player.name: player.wins for player in game.players.values()},
         "avatars": {player.name: player.avatar for player in game.players.values()},
         "elo_changes": elo_changes,
+        "is_bot_match": game.is_bot_match,
+        "progression_disabled": not should_track_progress(game),
     })
     await game.broadcast_match_state()
 
@@ -632,7 +641,443 @@ def create_payment(
     except Exception as e:
         return {"error": str(e)}
 
-games: Dict[str, dict] = {}
+games: Dict[str, Game] = {}
+
+BOT_IDENTITIES = {
+    "easy": [
+        ("Sootsprite", "🦊"),
+        ("Pebble Pup", "🐶"),
+        ("Mossling", "🌿"),
+    ],
+    "medium": [
+        ("Mist Dealer", "🌫️"),
+        ("Circuit Crow", "🐦"),
+        ("Rune Fox", "🦊"),
+    ],
+    "hard": [
+        ("Void Crown", "👑"),
+        ("Oracle Coil", "🐉"),
+        ("Night Algorithm", "🤖"),
+    ],
+}
+
+
+def should_track_progress(game: Game) -> bool:
+    return not game.is_bot_match
+
+
+def first_number(value: str) -> int:
+    match = re.search(r"-?\d+", value)
+    return int(match.group(0)) if match else 0
+
+
+def generate_private_game_id(prefix: str = "bot") -> str:
+    while True:
+        game_id = f"{prefix}-{uuid.uuid4().hex[:8]}"
+        if game_id not in games:
+            return game_id
+
+
+def choose_bot_identity(difficulty: str) -> tuple[str, str]:
+    choices = BOT_IDENTITIES.get(difficulty, BOT_IDENTITIES["medium"])
+    return random.choice(choices)
+
+
+def get_bot_delay_seconds(game: Game) -> float:
+    if game.phase == "shop":
+        return {"easy": 2.8, "medium": 1.9, "hard": 1.2}.get(game.bot_difficulty or "medium", 1.9)
+    return {"easy": 2.4, "medium": 1.5, "hard": 0.95}.get(game.bot_difficulty or "medium", 1.5)
+
+
+def serialize_selected_cards(cards) -> list[dict]:
+    return [{"rank": card.rank, "suit": card.suit} for card in cards]
+
+
+def get_bot_combo_candidates(hand, difficulty: str):
+    max_cards = min(5, len(hand))
+    min_cards = 1
+    if difficulty == "easy":
+        sizes = [5] if len(hand) >= 5 else [max_cards]
+    elif difficulty == "medium":
+        sizes = list(range(min(3, max_cards), max_cards + 1))
+    else:
+        sizes = list(range(min_cards, max_cards + 1))
+
+    candidates = []
+    for size in sizes:
+        candidates.extend(itertools.combinations(hand, size))
+    return candidates
+
+
+def choose_best_bot_hand(game: Game, bot_id: str, difficulty: str):
+    player = game.players[bot_id]
+    best_result = None
+
+    for combo in get_bot_combo_candidates(player.hand, difficulty):
+        serialized_cards = serialize_selected_cards(combo)
+        damage, hand_type, multiplier = game.calculate_damage(serialized_cards, bot_id)
+        score = (
+            damage,
+            HAND_MULTIPLIERS.get(hand_type, multiplier),
+            len(combo),
+        )
+        if best_result is None or score > best_result["score"]:
+            best_result = {
+                "cards": serialized_cards,
+                "damage": damage,
+                "hand_type": hand_type,
+                "multiplier": multiplier,
+                "score": score,
+            }
+
+    return best_result
+
+
+def choose_bot_discards(game: Game, bot_id: str, difficulty: str):
+    player = game.players[bot_id]
+    if player.remaining_discards < 1 or not player.hand:
+        return []
+
+    best_hand = choose_best_bot_hand(game, bot_id, difficulty)
+    if not best_hand:
+        return []
+
+    best_multiplier = best_hand["multiplier"]
+    best_damage = best_hand["damage"]
+    if difficulty == "easy" and (best_multiplier >= 3 or best_damage >= 48):
+        return []
+    if difficulty == "medium" and (best_multiplier >= 3 or best_damage >= 38):
+        return []
+    if difficulty == "hard" and (best_multiplier >= 2 or best_damage >= 28):
+        return []
+
+    keep_tuples = {(card["rank"], card["suit"]) for card in best_hand["cards"]}
+    discard_pool = [
+        card
+        for card in player.hand
+        if (card.rank, card.suit) not in keep_tuples
+    ]
+    discard_pool.sort(key=lambda card: game.get_compressed_rank_value(RANK_VALUES[card.rank]))
+    discard_limit = 2 if difficulty == "easy" else 3 if difficulty == "medium" else 4
+    return serialize_selected_cards(discard_pool[:discard_limit])
+
+
+def bot_upgrade_score(game: Game, bot_id: str, upgrade_dict: dict, difficulty: str) -> float:
+    player = game.players[bot_id]
+    name = upgrade_dict["name"]
+    effect = upgrade_dict["effect"]
+    cost = max(1, int(upgrade_dict["cost"]))
+    amount = first_number(effect)
+    rarity_bonus = {
+        "common": 0.4,
+        "uncommon": 0.8,
+        "rare": 1.2,
+        "epic": 1.8,
+        "legendary": 2.4,
+    }.get(upgrade_dict["rarity"], 0.4)
+
+    score = rarity_bonus
+    low_health = player.health < max(65, int(player.max_health * 0.55))
+
+    if name == "Increase Health":
+        score += amount * (0.18 if low_health else 0.1)
+    elif name == "Increase Health %":
+        score += amount * (0.22 if low_health else 0.11)
+    elif name == "Increase Armor":
+        score += amount * (0.19 if low_health else 0.1)
+    elif name == "Increase Discards":
+        score += amount * (1.5 if difficulty != "easy" else 1.0)
+    elif name == "Increase Damage":
+        score += amount * 0.16
+    elif "Increase" in name and "Damage" in name:
+        score += amount * (0.17 if difficulty == "hard" else 0.13)
+    elif "Increase" in name and "Draw" in name:
+        score += amount * (0.13 if difficulty != "easy" else 0.09)
+    elif "Draw Specialist" in name:
+        score += amount * 0.15
+    elif "Cards Specialist" in name:
+        score += amount * 0.12
+    elif name == "Royal Invitation":
+        score += amount * 0.12
+    elif name == "Tiny Troublemakers":
+        score += amount * 0.11
+
+    return score / cost
+
+
+async def execute_discard_action(game_id: str, player_id: str, selected_cards: list[dict]):
+    game = games[game_id]
+    player = game.players[player_id]
+    player.remaining_discards -= 1
+    result = game.remove_selected_cards(player_id, selected_cards)
+    if "error" in result:
+        player.remaining_discards += 1
+        return result
+
+    hand_message = {
+        "type": "hand_updated",
+        "player": player_id,
+        "cards": result["new_hand"],
+        "remaining_discards": player.remaining_discards
+    }
+    await game.broadcast(hand_message)
+
+    if should_track_progress(game) and player.account_email:
+        draw_stats = summarize_drawn_hand(result["new_hand"])
+        update_player_progress(
+            player.account_email,
+            {
+                "cards_discarded": len(result["discarded"]),
+                **draw_stats,
+                **summarize_player_peaks(player),
+            },
+        )
+
+    return {
+        "message": "Cards discarded and new ones drawn",
+        "discarded": result["discarded"],
+        "new_hand": result["new_hand"],
+        "remaining_discards": player.remaining_discards
+    }
+
+
+async def execute_play_hand_action(game_id: str, player_id: str, selected_cards: list[dict]):
+    game = games[game_id]
+    player = game.players[player_id]
+    opponent_id = [pid for pid in game.players if pid != player_id][0]
+    opponent = game.players[opponent_id]
+
+    damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
+    armor_reduction = opponent.get_armor_damage_reduction()
+    actual_damage = max(
+        0,
+        int(round(damage * opponent.damage_taken_multiplier * (1.0 - armor_reduction))),
+    )
+    stat_changes = summarize_played_hand(selected_cards, hand_type)
+    stat_changes["damage_dealt"] = actual_damage
+    stat_changes["max_single_hand_damage"] = actual_damage
+
+    result = game.remove_selected_cards(player_id, selected_cards)
+    if "error" in result:
+        return result
+    stat_changes.update(summarize_drawn_hand(result["new_hand"]))
+
+    opponent.health = max(0, opponent.health - actual_damage)
+
+    winner = None
+    match_finished = False
+    round_finished = False
+    if opponent.health == 0:
+        winner = player_id
+        round_finished = True
+        player.wins += 1
+        if player.wins >= 5:
+            match_finished = True
+
+    player.remaining_discards = player.max_discards
+
+    if not winner:
+        game.turn_index = (game.turn_index + 1) % len(game.players)
+        game.start_battle_phase()
+    player.gold += multiplier + player.gold_gain_flat
+
+    await game.broadcast({
+        "type": "hand_played",
+        "player": player_id,
+        "cards": selected_cards,
+        "damage": actual_damage,
+        "health_update": {p.name: p.health for p in game.players.values()},
+        "max_health_update": {p.name: p.max_health for p in game.players.values()},
+        "score_update": {p.name: p.wins for p in game.players.values()},
+        "next_player": list(game.players.keys())[game.turn_index],
+        "hand_type": hand_type,
+        "new_hand": result["new_hand"],
+        "multiplier": multiplier,
+        "winner": winner,
+        "round_finished": round_finished,
+        "match_finished": match_finished,
+        "remaining_discards": player.remaining_discards,
+        "gold": multiplier + player.gold_gain_flat
+    })
+    if not winner:
+        await game.broadcast_match_state()
+        if game.is_bot_match and game.get_current_player_id() == game.bot_player_id:
+            schedule_bot_action(game_id)
+    elif match_finished:
+        await finalize_match(
+            game_id,
+            player_id,
+            opponent_id,
+            f"{player_id} reached 5 wins.",
+            {**stat_changes, "games_won": 1},
+            {"games_lost": 1},
+        )
+    else:
+        await game.reset_game()
+        if game.is_bot_match and game.bot_player_id in game.shop_waiting_players:
+            schedule_bot_action(game_id)
+
+    if should_track_progress(game) and not winner and player.account_email:
+        update_player_progress(
+            player.account_email,
+            {**stat_changes, **summarize_player_peaks(player)},
+        )
+
+    return {
+        "message": f"{player_id} played a hand",
+        "damage": actual_damage,
+        "multiplier": multiplier,
+        "new_hand": result["new_hand"],
+        "winner": winner,
+        "round_finished": round_finished,
+        "match_finished": match_finished,
+    }
+
+
+async def execute_buy_upgrade_action(game_id: str, player_id: str, upgrade_id: int):
+    game = games[game_id]
+    async with game.lock:
+        price = game.get_price(upgrade_id)
+        player = game.players[player_id]
+        if price > player.gold:
+            return {"message": "Not enough gold"}
+
+        player.gold -= price
+        await game.add_upgrade(player_id, upgrade_id)
+        await game.apply_upgrades(player_id)
+    if should_track_progress(game) and player.account_email:
+        update_player_progress(
+            player.account_email,
+            {"upgrades_bought": 1, **summarize_player_peaks(player)},
+        )
+    return {
+        "message": f"{player_id} bought upgrade {upgrade_id}",
+        "price": price,
+    }
+
+
+async def run_bot_shop_phase(game_id: str):
+    if game_id not in games:
+        return
+    game = games[game_id]
+    bot_id = game.bot_player_id
+    if not game.is_bot_match or not bot_id or bot_id not in game.players:
+        return
+    if game.phase != "shop" or bot_id not in game.shop_waiting_players:
+        return
+
+    difficulty = game.bot_difficulty or "medium"
+    player = game.players[bot_id]
+    offers = game.upgrade_store.get_selection_of_upgrades()
+
+    while True:
+        affordable = [upgrade for upgrade in offers if upgrade.cost <= player.gold]
+        if not affordable:
+            if game.shop_rerolls_remaining.get(bot_id, 0) > 0:
+                rerolled = game.reroll_shop_selection(bot_id)
+                if isinstance(rerolled, list):
+                    offers = [game.upgrade_store.get_upgrade_by_id(entry["id"]) for entry in rerolled]
+                    offers = [upgrade for upgrade in offers if upgrade is not None]
+                    continue
+            break
+
+        best_upgrade = max(
+            affordable,
+            key=lambda upgrade: bot_upgrade_score(game, bot_id, upgrade.to_dict(), difficulty),
+        )
+        best_score = bot_upgrade_score(game, bot_id, best_upgrade.to_dict(), difficulty)
+        threshold = 0.7 if difficulty == "easy" else 0.6 if difficulty == "medium" else 0.5
+        if best_score < threshold:
+            if game.shop_rerolls_remaining.get(bot_id, 0) > 0:
+                rerolled = game.reroll_shop_selection(bot_id)
+                if isinstance(rerolled, list):
+                    offers = [game.upgrade_store.get_upgrade_by_id(entry["id"]) for entry in rerolled]
+                    offers = [upgrade for upgrade in offers if upgrade is not None]
+                    continue
+            break
+
+        await execute_buy_upgrade_action(game_id, bot_id, best_upgrade.id)
+        offers = [upgrade for upgrade in offers if upgrade.id != best_upgrade.id]
+        await asyncio.sleep(0.18 if difficulty == "hard" else 0.28)
+
+    await game.mark_shop_ready(bot_id)
+    if game.phase == "battle" and game.get_current_player_id() == bot_id:
+        schedule_bot_action(game_id)
+
+
+async def run_bot_battle_turn(game_id: str):
+    if game_id not in games:
+        return
+    game = games[game_id]
+    bot_id = game.bot_player_id
+    if not game.is_bot_match or not bot_id or bot_id not in game.players:
+        return
+    if game.phase != "battle" or game.get_current_player_id() != bot_id:
+        return
+
+    difficulty = game.bot_difficulty or "medium"
+    discard_cards = choose_bot_discards(game, bot_id, difficulty)
+    if discard_cards:
+        await execute_discard_action(game_id, bot_id, discard_cards)
+        if game.phase == "battle" and game.get_current_player_id() == bot_id:
+            schedule_bot_action(game_id, 0.7 if difficulty == "easy" else 0.5 if difficulty == "medium" else 0.35)
+        return
+
+    best_hand = choose_best_bot_hand(game, bot_id, difficulty)
+    if not best_hand or not best_hand["cards"]:
+        game.turn_index = (game.turn_index + 1) % len(game.players)
+        game.start_battle_phase()
+        await game.broadcast({"message": "Turn ended", "next_player": game.get_current_player_id()})
+        await game.broadcast_match_state()
+        return
+
+    await execute_play_hand_action(game_id, bot_id, best_hand["cards"])
+    if game_id in games:
+        updated_game = games[game_id]
+        if updated_game.phase == "battle" and updated_game.get_current_player_id() == updated_game.bot_player_id:
+            schedule_bot_action(game_id)
+
+
+async def run_bot_action(game_id: str):
+    if game_id not in games:
+        return
+
+    game = games[game_id]
+    bot_id = game.bot_player_id
+    if not game.is_bot_match or not bot_id:
+        return
+
+    if game.phase == "shop" and bot_id in game.shop_waiting_players:
+        await run_bot_shop_phase(game_id)
+    elif game.phase == "battle" and game.get_current_player_id() == bot_id:
+        await run_bot_battle_turn(game_id)
+
+
+def schedule_bot_action(game_id: str, delay_seconds: float | None = None):
+    game = games.get(game_id)
+    if not game or not game.is_bot_match or not game.bot_player_id:
+        return
+    if game.phase == "match_over":
+        game.cancel_bot_task()
+        return
+    if game.phase == "battle" and game.get_current_player_id() != game.bot_player_id:
+        return
+    if game.phase == "shop" and game.bot_player_id not in game.shop_waiting_players:
+        return
+
+    game.cancel_bot_task()
+
+    async def runner():
+        try:
+            await asyncio.sleep(delay_seconds if delay_seconds is not None else get_bot_delay_seconds(game))
+            await run_bot_action(game_id)
+        except asyncio.CancelledError:
+            return
+        finally:
+            if game_id in games and games[game_id].bot_task is asyncio.current_task():
+                games[game_id].bot_task = None
+
+    game.bot_task = asyncio.create_task(runner())
 
 
 def summarize_played_hand(cards: list[dict], hand_type: str) -> dict[str, int]:
@@ -685,7 +1130,61 @@ def list_games():
                 "players": list(game.players.keys()),
             }
             for game_id, game in games.items()
+            if game.public_visibility
         ]
+    }
+
+
+@app.post("/game/bot/start")
+async def start_bot_game(
+    difficulty: str,
+    player_id: str,
+    email: str | None = None,
+    avatar: str | None = None,
+):
+    normalized_difficulty = difficulty.strip().lower()
+    if normalized_difficulty not in {"easy", "medium", "hard"}:
+        return {"error": "Invalid bot difficulty"}
+
+    normalized_player_id = player_id.strip()
+    if not normalized_player_id:
+        return {"error": "Player name is required"}
+
+    game_id = generate_private_game_id("bot")
+    bot_name, bot_avatar = choose_bot_identity(normalized_difficulty)
+    if bot_name == normalized_player_id:
+        bot_name = f"{bot_name} Bot"
+
+    game = Game(
+        is_bot_match=True,
+        bot_player_id=bot_name,
+        bot_difficulty=normalized_difficulty,
+        public_visibility=False,
+    )
+    games[game_id] = game
+
+    decoded_email = decode_email(email) if email else None
+    account_state = get_player_account_state(decoded_email)
+    game.add_player(
+        normalized_player_id,
+        account_email=decoded_email,
+        talent_bonuses=account_state["talent_bonuses"],
+        avatar=avatar,
+        level_unlocks=account_state["level_rewards"],
+        level_reward_bonuses=account_state["level_reward_bonuses"],
+    )
+    game.add_player(bot_name, avatar=bot_avatar)
+    game.start_battle_phase()
+
+    if game.get_current_player_id() == bot_name:
+        schedule_bot_action(game_id)
+
+    return {
+        "message": f"Started {normalized_difficulty} bot match",
+        "game_id": game_id,
+        "player_id": normalized_player_id,
+        "bot_player_id": bot_name,
+        "difficulty": normalized_difficulty,
     }
 
 @app.get("/game/{game_id}/players")
@@ -725,6 +1224,8 @@ async def join_game(
         return {"error": "Game not found"}
 
     game = games[game_id]
+    if not game.public_visibility:
+        return {"error": "Game not found"}
     decoded_email = decode_email(email) if email else None
     account_state = get_player_account_state(decoded_email)
     game.add_player(
@@ -771,6 +1272,12 @@ async def leave_game(game_id: str, player_id: str):
             )
 
     game.remove_player(player_id)
+
+    if game.is_bot_match:
+        game.cancel_bot_task()
+        if game_id in games:
+            del games[game_id]
+        return {"message": f"{player_id} left bot match {game_id}"}
 
     if not game.players:
         del games[game_id]
@@ -837,7 +1344,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         await websocket.send_json(upgrade_payload)
     print(f"Sent hand to {player_id} via WebSocket: {player.hand}")
 
-    if player.account_email:
+    if should_track_progress(game) and player.account_email:
         update_player_progress(
             player.account_email,
             {
@@ -845,6 +1352,12 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
                 **summarize_player_peaks(player),
             },
         )
+
+    if game.is_bot_match and game.bot_player_id:
+        if game.phase == "battle" and game.get_current_player_id() == game.bot_player_id:
+            schedule_bot_action(game_id)
+        elif game.phase == "shop" and game.bot_player_id in game.shop_waiting_players:
+            schedule_bot_action(game_id)
 
     try:
         while True:
@@ -903,43 +1416,9 @@ async def discard(game_id: str, request: dict):
         return {"error": "No cards selected"}
 
     player = game.players[player_id]
-
     if player.remaining_discards < 1:
         return {"error": "No discards remaining"}
-
-    player.remaining_discards -= 1
-
-    # Use the extracted card removal function
-    result = game.remove_selected_cards(player_id, selected_cards)
-    if "error" in result:
-        return result
-
-    # Broadcast updated hand to player
-    hand_message = {
-        "type": "hand_updated",
-        "player": player_id,
-        "cards": result["new_hand"],
-        "remaining_discards": player.remaining_discards
-    }
-    await game.broadcast(hand_message)
-
-    if player.account_email:
-        draw_stats = summarize_drawn_hand(result["new_hand"])
-        update_player_progress(
-            player.account_email,
-            {
-                "cards_discarded": len(result["discarded"]),
-                **draw_stats,
-                **summarize_player_peaks(player),
-            },
-        )
-
-    return {
-        "message": "Cards discarded and new ones drawn",
-        "discarded": result["discarded"],
-        "new_hand": result["new_hand"],
-        "remaining_discards": player.remaining_discards
-    }
+    return await execute_discard_action(game_id, player_id, selected_cards)
 
 @app.post("/game/{game_id}/play_hand")
 async def play_hand(game_id: str, request: dict):
@@ -973,6 +1452,8 @@ async def play_hand(game_id: str, request: dict):
             
     if not selected_cards:
         return {"error": "No cards selected"}
+
+    return await execute_play_hand_action(game_id, player_id, selected_cards)
 
     # Calculate damage
     damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
@@ -1093,6 +1574,8 @@ async def end_turn(game_id: str, player_id: str):
         # Broadcast turn update
         await game.broadcast({"message": "Turn ended", "next_player": next_player})
         await game.broadcast_match_state()
+        if game.is_bot_match and next_player == game.bot_player_id:
+            schedule_bot_action(game_id)
 
         return {"message": "Turn ended", "next_player": next_player}
 
@@ -1108,6 +1591,8 @@ async def add_upgrade(gameId: str, playerId: str, upgrade_id: str):
         return {"error": resolution["reason"]}
     if game.phase != "shop":
         return {"error": "Shop is not open"}
+    return await execute_buy_upgrade_action(gameId, playerId, int(upgrade_id))
+
     price = game.get_price(upgrade_id)
     player = game.players[playerId]
     print(f"Type of price: {type(price)} and player.gold {type(player.gold)}")
@@ -1151,7 +1636,7 @@ async def reroll_shop(game_id: str, player_id: str):
         return rerolled_selection
 
     player = game.players.get(player_id)
-    if player and player.account_email:
+    if player and should_track_progress(game) and player.account_email:
         update_player_progress(player.account_email, {"shop_rerolls_used": 1})
 
     return {
@@ -1178,6 +1663,8 @@ async def continue_from_shop(game_id: str, player_id: str):
         return {"error": "Shop is not open"}
 
     await game.mark_shop_ready(player_id)
+    if game.phase == "battle" and game.get_current_player_id() == game.bot_player_id:
+        schedule_bot_action(game_id)
     return {
         "message": f"{player_id} is ready",
         "waiting_players": game.get_shop_waiting_players(),

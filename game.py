@@ -48,7 +48,14 @@ RANK_COMPRESSION_FACTOR = 2.0
 
 
 class Game:
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        is_bot_match: bool = False,
+        bot_player_id: str | None = None,
+        bot_difficulty: str | None = None,
+        public_visibility: bool = True,
+    ):
         self.players: Dict[str, Player] = {}
         self.turn_index: int = 0
         self.round_starter_index: int = 0
@@ -62,9 +69,22 @@ class Game:
         self.battle_deadline_at: float | None = None
         self.match_winner: str | None = None
         self.match_end_reason: str | None = None
+        self.is_bot_match: bool = is_bot_match
+        self.bot_player_id: str | None = bot_player_id
+        self.bot_difficulty: str | None = bot_difficulty
+        self.public_visibility: bool = public_visibility
+        self.bot_task: asyncio.Task | None = None
         self.lock = asyncio.Lock()
         self.deck = self.generate_deck()
         self.upgrade_store = UpgradeStore()
+
+    def is_bot_player(self, player_id: str | None) -> bool:
+        return bool(self.is_bot_match and player_id and player_id == self.bot_player_id)
+
+    def cancel_bot_task(self):
+        if self.bot_task and not self.bot_task.done():
+            self.bot_task.cancel()
+        self.bot_task = None
 
     def add_player(
         self,
@@ -121,6 +141,7 @@ class Game:
             self.shop_bonus_reroll_player_id = None
             self.phase = "waiting"
             self.battle_deadline_at = None
+            self.cancel_bot_task()
 
     def get_current_player_id(self) -> str | None:
         if not self.players:
@@ -179,6 +200,7 @@ class Game:
         self.shop_waiting_players = set()
         self.shop_deadlines = {}
         self.shop_rerolls_remaining = {}
+        self.cancel_bot_task()
 
     def serialize_match_state(self) -> dict:
         return {
@@ -205,6 +227,8 @@ class Game:
 
         for player_name, last_seen in list(self.last_activity.items()):
             if player_name not in self.players:
+                continue
+            if self.is_bot_player(player_name):
                 continue
             if now - last_seen >= 120:
                 opponent_id = self.get_opponent_id(player_name)

@@ -5,10 +5,20 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from card import Card
 from game import Game
-from main import summarize_drawn_hand, summarize_player_peaks
+from main import (
+    games,
+    list_games,
+    choose_best_bot_hand,
+    finalize_match,
+    leave_game,
+    start_bot_game,
+    summarize_drawn_hand,
+    summarize_player_peaks,
+)
 from player import Player
 from upgrades import Upgrade
 from meta_progression import evaluate_achievements
+import main as main_module
 
 
 def make_upgrade(name: str, effect: str) -> Upgrade:
@@ -315,3 +325,78 @@ def test_peak_stat_achievements_unlock_from_thresholds():
     assert "health_peak_200" in unlocked
     assert "single_hand_damage_140" in unlocked
     assert "wins_healthy_90" in unlocked
+
+
+def test_start_bot_game_creates_private_match_and_hides_it_from_public_list(monkeypatch):
+    games.clear()
+    monkeypatch.setattr(main_module, "schedule_bot_action", lambda *_args, **_kwargs: None)
+
+    response = asyncio.run(start_bot_game("medium", "henrik"))
+
+    assert response["game_id"] in games
+    game = games[response["game_id"]]
+    assert game.is_bot_match is True
+    assert game.public_visibility is False
+    public_games = list_games()["games"]
+    assert response["game_id"] not in {entry["game_id"] for entry in public_games}
+
+    games.clear()
+
+
+def test_finalize_match_skips_ranked_progress_for_bot_matches(monkeypatch):
+    games.clear()
+    game = Game(is_bot_match=True, bot_player_id="bot-medium", bot_difficulty="medium", public_visibility=False)
+    game.add_player("henrik")
+    game.add_player("bot-medium", avatar="🤖")
+    games["bot-test"] = game
+
+    called = {"count": 0}
+
+    def fail_if_called(*_args, **_kwargs):
+        called["count"] += 1
+        raise AssertionError("update_match_progress should not be called for bot matches")
+
+    monkeypatch.setattr(main_module, "update_match_progress", fail_if_called)
+
+    payload = asyncio.run(finalize_match("bot-test", "henrik", "bot-medium", "Practice over"))
+
+    assert called["count"] == 0
+    assert payload["elo_changes"]["henrik"]["after"] is None
+    assert games["bot-test"].phase == "match_over"
+
+    games.clear()
+
+
+def test_leaving_bot_match_removes_private_game(monkeypatch):
+    games.clear()
+    monkeypatch.setattr(main_module, "schedule_bot_action", lambda *_args, **_kwargs: None)
+    response = asyncio.run(start_bot_game("easy", "henrik"))
+    game_id = response["game_id"]
+
+    leave_response = asyncio.run(leave_game(game_id, "henrik"))
+
+    assert "left bot match" in leave_response["message"]
+    assert game_id not in games
+
+
+def test_bot_can_choose_a_legal_hand():
+    game = Game(is_bot_match=True, bot_player_id="bot-hard", bot_difficulty="hard", public_visibility=False)
+    game.add_player("henrik")
+    game.add_player("bot-hard", avatar="🤖")
+    bot = game.players["bot-hard"]
+    bot.hand = [
+        Card("10", "Fire"),
+        Card("J", "Fire"),
+        Card("Q", "Fire"),
+        Card("K", "Fire"),
+        Card("A", "Fire"),
+        Card("2", "Water"),
+        Card("3", "Earth"),
+        Card("5", "Air"),
+    ]
+
+    best_hand = choose_best_bot_hand(game, "bot-hard", "hard")
+
+    assert best_hand is not None
+    assert 1 <= len(best_hand["cards"]) <= 5
+    assert best_hand["hand_type"] == "royal flush"
