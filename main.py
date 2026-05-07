@@ -12,6 +12,7 @@ import stripe
 import os
 import urllib.parse
 import json
+from relics import RELIC_POOL
 
 from sqlalchemy import create_engine, Column, String, Integer, Text
 from sqlalchemy.orm import declarative_base
@@ -805,6 +806,45 @@ def bot_upgrade_score(game: Game, bot_id: str, upgrade_dict: dict, difficulty: s
     return score / cost
 
 
+def bot_relic_score(game: Game, bot_id: str, relic: dict, difficulty: str) -> float:
+    player = game.players[bot_id]
+    relic_id = relic["id"]
+    score = 1.0
+
+    if relic_id == "tiny_tyrants":
+        score += (player.low_card_damage_modifier - 1.0) * 10
+        score += (player.low_card_draw_modifier - 1.0) * 8
+        score += (player.tiny_draw_modifier - 1.0) * 10
+    elif relic_id == "house_advantage":
+        score += (player.full_house_damage_modifier - 1.0) * 12
+        score += (player.pair_damage_modifier - 1.0) * 6
+    elif relic_id == "greedy_fingers":
+        score += player.max_discards * 1.8
+        score += 1.5 if player.health > 60 else -2.0
+    elif relic_id == "wild_orbit":
+        score += 4.5 if "joker" in player.level_unlocks else 0.5
+        score += (player.joker_draw_modifier - 1.0) * 10
+    elif relic_id == "tidal_memory":
+        score += (player.flush_damage_modifier - 1.0) * 12
+        score += sum(
+            modifier - 1.0
+            for modifier in (
+                player.fire_draw_modifier,
+                player.water_draw_modifier,
+                player.air_draw_modifier,
+                player.earth_draw_modifier,
+            )
+        ) * 2.2
+    elif relic_id == "overflow_chamber":
+        score += 4.0 if difficulty == "hard" else 2.8
+    elif relic_id == "plasma_lattice":
+        score += 5.0 if "plasma" in player.level_unlocks else -0.5
+    elif relic_id == "fortress_heart":
+        score += 5.0 if player.health < 55 else 2.6
+
+    return score
+
+
 async def execute_discard_action(game_id: str, player_id: str, selected_cards: list[dict]):
     game = games[game_id]
     player = game.players[player_id]
@@ -822,6 +862,9 @@ async def execute_discard_action(game_id: str, player_id: str, selected_cards: l
     }
     await game.broadcast(hand_message)
 
+    if player.discard_gold_bonus > 0:
+        player.gold += player.discard_gold_bonus
+
     if should_track_progress(game) and player.account_email:
         draw_stats = summarize_drawn_hand(result["new_hand"])
         update_player_progress(
@@ -837,7 +880,8 @@ async def execute_discard_action(game_id: str, player_id: str, selected_cards: l
         "message": "Cards discarded and new ones drawn",
         "discarded": result["discarded"],
         "new_hand": result["new_hand"],
-        "remaining_discards": player.remaining_discards
+        "remaining_discards": player.remaining_discards,
+        "gold": player.gold,
     }
 
 
@@ -863,6 +907,8 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
     stat_changes.update(summarize_drawn_hand(result["new_hand"]))
 
     opponent.health = max(0, opponent.health - actual_damage)
+    if hand_type == "full house" and player.full_house_armor_gain > 0:
+        player.armor += player.full_house_armor_gain
 
     winner = None
     match_finished = False
@@ -888,6 +934,10 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "damage": actual_damage,
         "health_update": {p.name: p.health for p in game.players.values()},
         "max_health_update": {p.name: p.max_health for p in game.players.values()},
+        "armor_update": {p.name: p.armor for p in game.players.values()},
+        "armor_reduction_update": {
+            p.name: p.get_armor_damage_reduction_pct() for p in game.players.values()
+        },
         "score_update": {p.name: p.wins for p in game.players.values()},
         "next_player": list(game.players.keys())[game.turn_index],
         "hand_type": hand_type,
@@ -1003,6 +1053,34 @@ async def run_bot_shop_phase(game_id: str):
     await game.mark_shop_ready(bot_id)
     if game.phase == "battle" and game.get_current_player_id() == bot_id:
         schedule_bot_action(game_id)
+    elif game.phase == "relic" and bot_id in game.relic_waiting_players:
+        schedule_bot_action(game_id)
+
+
+async def run_bot_relic_phase(game_id: str):
+    if game_id not in games:
+        return
+    game = games[game_id]
+    bot_id = game.bot_player_id
+    if not game.is_bot_match or not bot_id or bot_id not in game.players:
+        return
+    if game.phase != "relic" or bot_id not in game.relic_waiting_players:
+        return
+
+    offered_relics = [relic.to_dict() for relic in game.relic_choices_by_player.get(bot_id, [])]
+    if not offered_relics:
+        await game.mark_relic_ready(bot_id)
+        return
+
+    chosen = max(
+        offered_relics,
+        key=lambda relic: bot_relic_score(game, bot_id, relic, game.bot_difficulty or "medium"),
+    )
+    game.choose_relic(bot_id, chosen["id"])
+    await game.mark_relic_ready(bot_id)
+    await game.broadcast(game.players[bot_id].apply_upgrades())
+    if game.phase == "battle" and game.get_current_player_id() == bot_id:
+        schedule_bot_action(game_id)
 
 
 async def run_bot_battle_turn(game_id: str):
@@ -1049,6 +1127,8 @@ async def run_bot_action(game_id: str):
 
     if game.phase == "shop" and bot_id in game.shop_waiting_players:
         await run_bot_shop_phase(game_id)
+    elif game.phase == "relic" and bot_id in game.relic_waiting_players:
+        await run_bot_relic_phase(game_id)
     elif game.phase == "battle" and game.get_current_player_id() == bot_id:
         await run_bot_battle_turn(game_id)
 
@@ -1063,6 +1143,8 @@ def schedule_bot_action(game_id: str, delay_seconds: float | None = None):
     if game.phase == "battle" and game.get_current_player_id() != game.bot_player_id:
         return
     if game.phase == "shop" and game.bot_player_id not in game.shop_waiting_players:
+        return
+    if game.phase == "relic" and game.bot_player_id not in game.relic_waiting_players:
         return
 
     game.cancel_bot_task()
@@ -1204,6 +1286,10 @@ def get_players(game_id: str):
         "battle_deadline_at": game.battle_deadline_at,
         "shop_deadlines": dict(game.shop_deadlines),
         "is_bot_match": game.is_bot_match,
+        "relics_by_player": {
+            player_id: [relic.to_dict() for relic in player.relics]
+            for player_id, player in game.players.items()
+        },
     }
 
 @app.post("/game/create/{game_id}")
@@ -1358,6 +1444,8 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         if game.phase == "battle" and game.get_current_player_id() == game.bot_player_id:
             schedule_bot_action(game_id)
         elif game.phase == "shop" and game.bot_player_id in game.shop_waiting_players:
+            schedule_bot_action(game_id)
+        elif game.phase == "relic" and game.bot_player_id in game.relic_waiting_players:
             schedule_bot_action(game_id)
 
     try:
@@ -1644,6 +1732,7 @@ async def reroll_shop(game_id: str, player_id: str):
         "message": "Shop rerolled",
         "upgrades": rerolled_selection,
         "rerolls_remaining": game.shop_rerolls_remaining.get(player_id, 0),
+        "health": game.players[player_id].health,
     }
 
 
@@ -1666,7 +1755,39 @@ async def continue_from_shop(game_id: str, player_id: str):
     await game.mark_shop_ready(player_id)
     if game.phase == "battle" and game.get_current_player_id() == game.bot_player_id:
         schedule_bot_action(game_id)
+    elif game.phase == "relic" and game.bot_player_id in game.relic_waiting_players:
+        schedule_bot_action(game_id)
     return {
         "message": f"{player_id} is ready",
         "waiting_players": game.get_shop_waiting_players(),
+    }
+
+
+@app.post("/game/{game_id}/relic/choose")
+async def choose_relic(game_id: str, player_id: str, relic_id: str):
+    if game_id not in games:
+        return {"error": "Game not found"}
+
+    game = games[game_id]
+    if player_id not in game.players:
+        return {"error": "Player not found"}
+
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "relic":
+        return {"error": "Relic choice is not open"}
+
+    chosen = game.choose_relic(player_id, relic_id)
+    if isinstance(chosen, dict) and chosen.get("error"):
+        return chosen
+
+    await game.broadcast(game.players[player_id].apply_upgrades())
+    await game.mark_relic_ready(player_id)
+    if game.phase == "battle" and game.get_current_player_id() == game.bot_player_id:
+        schedule_bot_action(game_id)
+    return {
+        "message": f"{player_id} chose {chosen.name}",
+        "waiting_players": game.get_relic_waiting_players(),
     }

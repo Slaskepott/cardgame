@@ -402,3 +402,34 @@ def test_bot_can_choose_a_legal_hand():
     assert best_hand is not None
     assert 1 <= len(best_hand["cards"]) <= 5
     assert best_hand["hand_type"] == "royal flush"
+
+
+def test_relic_round_triggers_after_two_rounds_completed():
+    game = Game()
+    game.add_player("alice")
+    game.add_player("bob")
+    game.players["alice"].wins = 2
+
+    assert game.should_trigger_relic_round() is True
+
+
+def test_tiny_tyrants_triples_damage_for_twos_threes_and_fours():
+    game = Game()
+    player = Player("tester")
+    player.relics = [main_module.RELIC_POOL[0]]
+    player.apply_upgrades()
+    game.players[player.name] = player
+
+    selected_cards = [
+        {"rank": "2", "suit": "Fire"},
+        {"rank": "2", "suit": "Water"},
+        {"rank": "3", "suit": "Earth"},
+        {"rank": "4", "suit": "Air"},
+        {"rank": "9", "suit": "Fire"},
+    ]
+
+    damage, hand_type, multiplier = game.calculate_damage(selected_cards, player.name)
+
+    assert hand_type == "pair"
+    assert multiplier == 2
+    assert damage == 28

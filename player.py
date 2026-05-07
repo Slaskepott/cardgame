@@ -1,6 +1,7 @@
 from typing import List
 
 from card import Card
+from relics import Relic
 from upgrades import Upgrade
 
 
@@ -30,6 +31,7 @@ class Player:
         self.max_discards = 1
         self.hand_size = 8
         self.upgrades: List[Upgrade] = []
+        self.relics: List[Relic] = []
         self.gold = 0
         self.damage_modifier = 1.0
         self.water_damage_modifier = 1.0
@@ -57,6 +59,11 @@ class Player:
         self.shop_rerolls_flat = 0
         self.damage_taken_multiplier = 1.0
         self.plasma_bonus_value = 0
+        self.tiny_rank_damage_multiplier = 1.0
+        self.discard_gold_bonus = 0
+        self.reroll_health_cost = 0
+        self.full_house_armor_gain = 0
+        self.repeated_suit_damage_bonus_pct = 0
         self.apply_upgrades()
         self.special_deck = self.build_special_deck()
 
@@ -165,6 +172,11 @@ class Player:
         self.plasma_draw_modifier += self.level_reward_bonuses.get("plasma_draw_pct", 0) / 100.0
         self.plasma_damage_modifier += self.level_reward_bonuses.get("plasma_damage_pct", 0) / 100.0
         self.plasma_bonus_value = int(self.level_reward_bonuses.get("plasma_bonus_value", 0))
+        self.tiny_rank_damage_multiplier = 1.0
+        self.discard_gold_bonus = 0
+        self.reroll_health_cost = 0
+        self.full_house_armor_gain = 0
+        self.repeated_suit_damage_bonus_pct = 0
 
         health_percentage_bonus = 1.0 + (
             (self.talent_bonuses.get("health_pct", 0) + self.level_reward_bonuses.get("health_pct", 0))
@@ -212,6 +224,29 @@ class Player:
                     getattr(self, modifier_name) + int(upgrade.effect.split("%")[0]) / 100.0,
                 )
 
+        for relic in self.relics:
+            if relic.id == "tiny_tyrants":
+                self.tiny_rank_damage_multiplier = 3.0
+            elif relic.id == "house_advantage":
+                self.full_house_armor_gain += 12
+            elif relic.id == "greedy_fingers":
+                self.discard_gold_bonus += 1
+                self.max_health -= 20
+            elif relic.id == "wild_orbit":
+                self.joker_draw_modifier += 1.5
+                self.reroll_health_cost += 6
+            elif relic.id == "tidal_memory":
+                self.repeated_suit_damage_bonus_pct += 18
+            elif relic.id == "overflow_chamber":
+                self.hand_size += 1
+                self.damage_modifier = max(0.4, self.damage_modifier - 0.2)
+            elif relic.id == "plasma_lattice":
+                self.plasma_damage_modifier += 0.4
+                self.plasma_draw_modifier += 0.3
+            elif relic.id == "fortress_heart":
+                self.armor += 25
+                self.max_health += 20
+
         self.max_health = int(self.max_health * health_percentage_bonus)
         self.health = self.max_health
         self.remaining_discards = self.max_discards
@@ -225,6 +260,7 @@ class Player:
             "armor": self.armor,
             "armor_reduction_pct": self.get_armor_damage_reduction_pct(),
             "upgrades": [upgrade.to_dict() for upgrade in self.upgrades],
+            "relics": [relic.to_dict() for relic in self.relics],
         }
 
     def get_draw_weight(self, card: Card) -> float:

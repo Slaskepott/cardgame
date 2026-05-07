@@ -9,6 +9,7 @@ from fastapi import WebSocket
 
 from card import Card
 from player import Player
+from relics import Relic, get_relic_offer_set
 from upgrades import UpgradeStore
 
 
@@ -62,8 +63,12 @@ class Game:
         self.shop_bonus_reroll_player_id: str | None = None
         self.websocket_connections: Dict[str, WebSocket] = {}
         self.shop_waiting_players: set[str] = set()
+        self.relic_waiting_players: set[str] = set()
         self.shop_deadlines: dict[str, float] = {}
         self.shop_rerolls_remaining: dict[str, int] = {}
+        self.relic_choices_by_player: dict[str, list[Relic]] = {}
+        self.relic_seen_ids_by_player: dict[str, set[str]] = {}
+        self.relic_rounds_triggered: set[int] = set()
         self.last_activity: dict[str, float] = {}
         self.phase: str = "waiting"
         self.battle_deadline_at: float | None = None
@@ -105,6 +110,7 @@ class Game:
                 level_reward_bonuses=level_reward_bonuses,
             )
             self.last_activity[player_name] = time.time()
+            self.relic_seen_ids_by_player[player_name] = set()
             return
 
         player = self.players[player_name]
@@ -128,8 +134,11 @@ class Game:
         del self.players[player_name]
         self.websocket_connections.pop(player_name, None)
         self.shop_waiting_players.discard(player_name)
+        self.relic_waiting_players.discard(player_name)
         self.shop_deadlines.pop(player_name, None)
         self.shop_rerolls_remaining.pop(player_name, None)
+        self.relic_choices_by_player.pop(player_name, None)
+        self.relic_seen_ids_by_player.pop(player_name, None)
         self.last_activity.pop(player_name, None)
 
         if self.players:
@@ -163,8 +172,10 @@ class Game:
         self.phase = "waiting"
         self.battle_deadline_at = None
         self.shop_waiting_players = set()
+        self.relic_waiting_players = set()
         self.shop_deadlines = {}
         self.shop_rerolls_remaining = {}
+        self.relic_choices_by_player = {}
 
     def start_battle_phase(self):
         if len(self.players) < 2:
@@ -174,8 +185,10 @@ class Game:
         self.phase = "battle"
         self.battle_deadline_at = None if self.is_bot_match else time.time() + 60
         self.shop_waiting_players = set()
+        self.relic_waiting_players = set()
         self.shop_deadlines = {}
         self.shop_rerolls_remaining = {}
+        self.relic_choices_by_player = {}
         for player_id in self.players.keys():
             player = self.players[player_id]
             while len(player.hand) < player.hand_size:
@@ -191,6 +204,7 @@ class Game:
         self.phase = "shop"
         self.battle_deadline_at = None
         self.shop_waiting_players = set(self.players.keys())
+        self.relic_waiting_players = set()
         if self.is_bot_match:
             self.shop_deadlines = {}
         else:
@@ -201,14 +215,35 @@ class Game:
             for player_name in self.players.keys()
         }
 
+    def start_relic_phase(self):
+        if len(self.players) < 2:
+            self.start_waiting_phase()
+            return
+
+        self.phase = "relic"
+        self.battle_deadline_at = None
+        self.shop_waiting_players = set()
+        self.relic_waiting_players = set(self.players.keys())
+        self.shop_deadlines = {}
+        self.shop_rerolls_remaining = {}
+        self.relic_choices_by_player = {}
+        for player_id, player in self.players.items():
+            seen_ids = self.relic_seen_ids_by_player.setdefault(player_id, set())
+            excluded_ids = seen_ids.union({relic.id for relic in player.relics})
+            offers = get_relic_offer_set(excluded_ids)
+            self.relic_choices_by_player[player_id] = offers
+            seen_ids.update(relic.id for relic in offers)
+
     def set_match_over(self, winner_id: str, reason: str):
         self.phase = "match_over"
         self.match_winner = winner_id
         self.match_end_reason = reason
         self.battle_deadline_at = None
         self.shop_waiting_players = set()
+        self.relic_waiting_players = set()
         self.shop_deadlines = {}
         self.shop_rerolls_remaining = {}
+        self.relic_choices_by_player = {}
         self.cancel_bot_task()
 
     def serialize_match_state(self) -> dict:
@@ -219,6 +254,11 @@ class Game:
             "battle_deadline_at": self.battle_deadline_at,
             "shop_deadlines": dict(self.shop_deadlines),
             "waiting_players": self.get_shop_waiting_players(),
+            "relic_waiting_players": self.get_relic_waiting_players(),
+            "relics_by_player": {
+                player_id: [relic.to_dict() for relic in player.relics]
+                for player_id, player in self.players.items()
+            },
             "wins_to_clinch": 5,
             "best_of": 9,
             "match_winner": self.match_winner,
@@ -293,10 +333,23 @@ class Game:
     def get_shop_waiting_players(self) -> list[str]:
         return [player_name for player_name in self.players.keys() if player_name in self.shop_waiting_players]
 
+    def get_relic_waiting_players(self) -> list[str]:
+        return [player_name for player_name in self.players.keys() if player_name in self.relic_waiting_players]
+
+    def should_trigger_relic_round(self) -> bool:
+        total_rounds_completed = sum(player.wins for player in self.players.values())
+        return total_rounds_completed in {2, 4, 6} and total_rounds_completed not in self.relic_rounds_triggered
+
     async def broadcast_shop_status(self):
         await self.broadcast({
             "type": "shop_status",
             "waiting_players": self.get_shop_waiting_players(),
+        })
+
+    async def broadcast_relic_status(self):
+        await self.broadcast({
+            "type": "relic_status",
+            "waiting_players": self.get_relic_waiting_players(),
         })
 
     async def mark_shop_ready(self, player_id: str):
@@ -304,6 +357,19 @@ class Game:
         self.shop_deadlines.pop(player_id, None)
         await self.broadcast_shop_status()
         if not self.shop_waiting_players:
+            if self.should_trigger_relic_round():
+                total_rounds_completed = sum(player.wins for player in self.players.values())
+                self.relic_rounds_triggered.add(total_rounds_completed)
+                await self.open_relic_selection()
+            else:
+                self.start_battle_phase()
+            await self.broadcast_match_state()
+
+    async def mark_relic_ready(self, player_id: str):
+        self.relic_waiting_players.discard(player_id)
+        self.relic_choices_by_player.pop(player_id, None)
+        await self.broadcast_relic_status()
+        if not self.relic_waiting_players:
             self.start_battle_phase()
             await self.broadcast_match_state()
 
@@ -331,6 +397,9 @@ class Game:
             return {"error": "No rerolls remaining"}
 
         self.shop_rerolls_remaining[player_id] = rerolls_remaining - 1
+        player = self.players.get(player_id)
+        if player and player.reroll_health_cost > 0:
+            player.health = max(1, player.health - player.reroll_health_cost)
         store_selection = self.upgrade_store.get_selection_of_upgrades()
         return [upgrade.to_dict() for upgrade in store_selection]
 
@@ -356,6 +425,36 @@ class Game:
 
         await self.broadcast_shop_status()
         await self.broadcast_match_state()
+
+    async def open_relic_selection(self):
+        self.start_relic_phase()
+        for player_id, ws in self.websocket_connections.items():
+            try:
+                await ws.send_json({
+                    "type": "open_relics",
+                    "player": player_id,
+                    "relics": [relic.to_dict() for relic in self.relic_choices_by_player.get(player_id, [])],
+                    "waiting_players": self.get_relic_waiting_players(),
+                })
+            except Exception as error:
+                print(f"Failed to send relic selection to {player_id}: {error}")
+                traceback.print_exc()
+
+        await self.broadcast_relic_status()
+        await self.broadcast_match_state()
+
+    def choose_relic(self, player_id: str, relic_id: str) -> Relic | dict:
+        if player_id not in self.players:
+            return {"error": "Player not found"}
+
+        offered = self.relic_choices_by_player.get(player_id, [])
+        relic = next((entry for entry in offered if entry.id == relic_id), None)
+        if not relic:
+            return {"error": "Relic not found"}
+
+        self.players[player_id].relics.append(relic)
+        self.players[player_id].apply_upgrades()
+        return relic
 
     async def apply_upgrades(self, player_id):
         await self.broadcast(self.players[player_id].apply_upgrades())
@@ -475,8 +574,15 @@ class Game:
                 rank_modifier *= player.low_card_damage_modifier
             elif rank >= 10:
                 rank_modifier *= player.high_card_damage_modifier
+            if rank in {2, 3, 4}:
+                rank_modifier *= player.tiny_rank_damage_multiplier
 
             total_modifier = modifier_dict.get(suit, 1.0) * player.damage_modifier * rank_modifier
+            repeat_count = max(0, suit_counts.get(suit, 0) - 1)
+            if repeat_count > 0 and player.repeated_suit_damage_bonus_pct > 0:
+                total_modifier *= 1.0 + (
+                    repeat_count * player.repeated_suit_damage_bonus_pct / 100.0
+                )
             compressed_rank = self.get_compressed_rank_value(rank)
             damage_rank = compressed_rank + (player.plasma_bonus_value if suit == "Plasma" else 0)
             base_values.append(damage_rank * total_modifier)
