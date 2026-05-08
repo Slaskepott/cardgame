@@ -569,6 +569,10 @@ class Game:
             rank_counts[rank] = rank_counts.get(rank, 0) + 1
             suit_counts[suit] = suit_counts.get(suit, 0) + 1
             ranks.append(rank)
+
+        for card in cards:
+            rank = RANK_VALUES[card["rank"]]
+            suit = card["suit"]
             rank_modifier = 1.0
             if rank <= 7:
                 rank_modifier *= player.low_card_damage_modifier
