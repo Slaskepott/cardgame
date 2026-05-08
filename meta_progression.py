@@ -406,8 +406,8 @@ TALENT_DEFINITIONS = [
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_bastion_lore"],
-        "row": 2,
-        "column": 1,
+        "row": 3,
+        "column": 0,
         "bonuses": {"max_discards_flat": 1},
     },
     {
@@ -418,8 +418,8 @@ TALENT_DEFINITIONS = [
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_long_breath"],
-        "row": 3,
-        "column": 0,
+        "row": 2,
+        "column": 1,
         "bonuses": {"low_card_draw_pct": 12, "low_card_damage_pct": 6},
     },
     {
