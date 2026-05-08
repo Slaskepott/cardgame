@@ -65,6 +65,20 @@ class UpgradeStore:
         self.add_upgrade(93, "Increase Armor", 4, "epic", "+42 Armor", 16)
         self.add_upgrade(94, "Increase Armor", 5, "legendary", "+60 Armor", 23)
 
+        # Damage resistances
+        self.add_upgrade(95, "Low Card Shield", 1, "common", "+12% Low Card Resistance", 4)
+        self.add_upgrade(96, "Low Card Shield", 2, "uncommon", "+20% Low Card Resistance", 7)
+        self.add_upgrade(97, "Low Card Shield", 3, "rare", "+32% Low Card Resistance", 11)
+        self.add_upgrade(98, "High Card Shield", 1, "common", "+10% High Card Resistance", 4)
+        self.add_upgrade(99, "High Card Shield", 2, "uncommon", "+18% High Card Resistance", 7)
+        self.add_upgrade(100, "High Card Shield", 3, "rare", "+28% High Card Resistance", 11)
+        self.add_upgrade(101, "Straight Shelter", 1, "uncommon", "+12% Straight Resistance", 5)
+        self.add_upgrade(102, "Straight Shelter", 2, "rare", "+20% Straight Resistance", 9)
+        self.add_upgrade(103, "Straight Shelter", 3, "epic", "+30% Straight Resistance", 14)
+        self.add_upgrade(104, "Flush Shelter", 1, "uncommon", "+12% Flush Resistance", 5)
+        self.add_upgrade(105, "Flush Shelter", 2, "rare", "+20% Flush Resistance", 9)
+        self.add_upgrade(106, "Flush Shelter", 3, "epic", "+30% Flush Resistance", 14)
+
         # Increase Discards
         self.add_upgrade(6, "Increase Discards", 1, "common", "+1 Discard", 6)
         self.add_upgrade(7, "Increase Discards", 2, "rare", "+2 Discards", 12)

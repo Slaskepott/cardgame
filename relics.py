@@ -67,6 +67,12 @@ RELIC_POOL: list[Relic] = [
         theme="bulwark",
         description="Gain 25 armor and 20 max health.",
     ),
+    Relic(
+        id="pattern_ward",
+        name="Pattern Ward",
+        theme="bulwark",
+        description="Strong hands deal 18% less damage to you.",
+    ),
 ]
 
 

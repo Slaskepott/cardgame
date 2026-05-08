@@ -786,6 +786,14 @@ def bot_upgrade_score(game: Game, bot_id: str, upgrade_dict: dict, difficulty: s
         score += amount * (0.22 if low_health else 0.11)
     elif name == "Increase Armor":
         score += amount * (0.19 if low_health else 0.1)
+    elif name == "Low Card Shield":
+        score += amount * (0.16 if difficulty != "easy" else 0.11)
+    elif name == "High Card Shield":
+        score += amount * (0.16 if difficulty != "easy" else 0.11)
+    elif name == "Straight Shelter":
+        score += amount * (0.17 if difficulty == "hard" else 0.12)
+    elif name == "Flush Shelter":
+        score += amount * (0.17 if difficulty == "hard" else 0.12)
     elif name == "Increase Discards":
         score += amount * (1.5 if difficulty != "easy" else 1.0)
     elif name == "Increase Damage":
@@ -841,6 +849,8 @@ def bot_relic_score(game: Game, bot_id: str, relic: dict, difficulty: str) -> fl
         score += 5.0 if "plasma" in player.level_unlocks else -0.5
     elif relic_id == "fortress_heart":
         score += 5.0 if player.health < 55 else 2.6
+    elif relic_id == "pattern_ward":
+        score += 4.8 if player.health < 65 else 2.7
 
     return score
 
@@ -891,11 +901,14 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
     opponent_id = [pid for pid in game.players if pid != player_id][0]
     opponent = game.players[opponent_id]
 
-    damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
-    armor_reduction = opponent.get_armor_damage_reduction()
-    actual_damage = max(
-        0,
-        int(round(damage * opponent.damage_taken_multiplier * (1.0 - armor_reduction))),
+    damage_details = game.calculate_damage_details(selected_cards, player_id)
+    damage = damage_details["damage"]
+    hand_type = damage_details["hand_type"]
+    multiplier = damage_details["multiplier"]
+    actual_damage = opponent.mitigate_incoming_damage(
+        damage,
+        damage_details["resolved_cards"],
+        hand_type,
     )
     stat_changes = summarize_played_hand(selected_cards, hand_type)
     stat_changes["damage_dealt"] = actual_damage
@@ -1545,11 +1558,14 @@ async def play_hand(game_id: str, request: dict):
     return await execute_play_hand_action(game_id, player_id, selected_cards)
 
     # Calculate damage
-    damage, hand_type, multiplier = game.calculate_damage(selected_cards, player_id)
-    armor_reduction = opponent.get_armor_damage_reduction()
-    actual_damage = max(
-        0,
-        int(round(damage * opponent.damage_taken_multiplier * (1.0 - armor_reduction))),
+    damage_details = game.calculate_damage_details(selected_cards, player_id)
+    damage = damage_details["damage"]
+    hand_type = damage_details["hand_type"]
+    multiplier = damage_details["multiplier"]
+    actual_damage = opponent.mitigate_incoming_damage(
+        damage,
+        damage_details["resolved_cards"],
+        hand_type,
     )
     stat_changes = summarize_played_hand(selected_cards, hand_type)
     stat_changes["damage_dealt"] = actual_damage

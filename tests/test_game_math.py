@@ -19,6 +19,7 @@ from player import Player
 from upgrades import Upgrade
 from meta_progression import evaluate_achievements
 import main as main_module
+from relics import get_relic_by_id
 
 
 def make_upgrade(name: str, effect: str) -> Upgrade:
@@ -433,3 +434,56 @@ def test_tiny_tyrants_triples_damage_for_twos_threes_and_fours():
     assert hand_type == "pair"
     assert multiplier == 2
     assert damage == 28
+
+
+def test_apply_upgrades_tracks_new_resistance_upgrades():
+    player = Player("tester")
+    player.upgrades = [
+        make_upgrade("Low Card Shield", "+20% Low Card Resistance"),
+        make_upgrade("High Card Shield", "+18% High Card Resistance"),
+        make_upgrade("Straight Shelter", "+12% Straight Resistance"),
+        make_upgrade("Flush Shelter", "+12% Flush Resistance"),
+    ]
+
+    player.apply_upgrades()
+
+    assert player.low_card_resistance_pct == 20
+    assert player.high_card_resistance_pct == 18
+    assert player.straight_resistance_pct == 12
+    assert player.flush_resistance_pct == 12
+
+
+def test_low_card_and_straight_resistance_reduce_incoming_damage():
+    defender = Player(
+        "defender",
+        talent_bonuses={
+            "low_card_resistance_pct": 20,
+            "straight_resistance_pct": 25,
+        },
+    )
+
+    incoming_cards = [
+        {"rank": "2", "suit": "Fire"},
+        {"rank": "3", "suit": "Water"},
+        {"rank": "4", "suit": "Air"},
+        {"rank": "5", "suit": "Earth"},
+        {"rank": "6", "suit": "Fire"},
+    ]
+
+    assert defender.mitigate_incoming_damage(100, incoming_cards, "straight") == 60
+
+
+def test_pattern_ward_reduces_damage_from_strong_hands():
+    defender = Player("defender")
+    defender.relics = [get_relic_by_id("pattern_ward")]
+    defender.apply_upgrades()
+
+    incoming_cards = [
+        {"rank": "10", "suit": "Fire"},
+        {"rank": "J", "suit": "Fire"},
+        {"rank": "Q", "suit": "Fire"},
+        {"rank": "K", "suit": "Fire"},
+        {"rank": "A", "suit": "Fire"},
+    ]
+
+    assert defender.mitigate_incoming_damage(100, incoming_cards, "straight flush") == 67

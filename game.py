@@ -648,6 +648,10 @@ class Game:
         return total_damage, hand_type, multiplier
 
     def calculate_damage(self, cards, player_id):
+        details = self.calculate_damage_details(cards, player_id)
+        return details["damage"], details["hand_type"], details["multiplier"]
+
+    def calculate_damage_details(self, cards, player_id):
         player = self.players[player_id]
         variants_per_card = [self.resolve_card_variants(player, card) for card in cards]
         best_result = None
@@ -660,9 +664,19 @@ class Game:
             score = (total_damage, multiplier, rank_total)
             if best_score is None or score > best_score:
                 best_score = score
-                best_result = (total_damage, hand_type, multiplier)
+                best_result = {
+                    "damage": total_damage,
+                    "hand_type": hand_type,
+                    "multiplier": multiplier,
+                    "resolved_cards": resolved_list,
+                }
 
         if best_result is None:
-            return 0, "high card", 1
+            return {
+                "damage": 0,
+                "hand_type": "high card",
+                "multiplier": 1,
+                "resolved_cards": [],
+            }
 
         return best_result

@@ -55,6 +55,12 @@ class Player:
         self.straight_damage_modifier = 1.0
         self.flush_damage_modifier = 1.0
         self.full_house_damage_modifier = 1.0
+        self.low_card_resistance_pct = 0
+        self.high_card_resistance_pct = 0
+        self.straight_resistance_pct = 0
+        self.flush_resistance_pct = 0
+        self.full_house_resistance_pct = 0
+        self.four_kind_resistance_pct = 0
         self.gold_gain_flat = 0
         self.shop_rerolls_flat = 0
         self.damage_taken_multiplier = 1.0
@@ -163,6 +169,12 @@ class Player:
         self.straight_damage_modifier = 1.0 + (self.talent_bonuses.get("straight_damage_pct", 0) / 100.0)
         self.flush_damage_modifier = 1.0 + (self.talent_bonuses.get("flush_damage_pct", 0) / 100.0)
         self.full_house_damage_modifier = 1.0 + (self.talent_bonuses.get("full_house_damage_pct", 0) / 100.0)
+        self.low_card_resistance_pct = float(self.talent_bonuses.get("low_card_resistance_pct", 0))
+        self.high_card_resistance_pct = float(self.talent_bonuses.get("high_card_resistance_pct", 0))
+        self.straight_resistance_pct = float(self.talent_bonuses.get("straight_resistance_pct", 0))
+        self.flush_resistance_pct = float(self.talent_bonuses.get("flush_resistance_pct", 0))
+        self.full_house_resistance_pct = float(self.talent_bonuses.get("full_house_resistance_pct", 0))
+        self.four_kind_resistance_pct = float(self.talent_bonuses.get("four_kind_resistance_pct", 0))
         self.gold_gain_flat = int(self.talent_bonuses.get("gold_gain_flat", 0))
         self.shop_rerolls_flat = int(self.talent_bonuses.get("shop_rerolls_flat", 0))
         self.damage_taken_multiplier = max(
@@ -189,6 +201,14 @@ class Player:
                 self.max_health += int(upgrade.effect.split()[0])
             elif upgrade.name == "Increase Armor":
                 self.armor += int(upgrade.effect.split()[0])
+            elif upgrade.name == "Low Card Shield":
+                self.low_card_resistance_pct += int(upgrade.effect.split("%")[0])
+            elif upgrade.name == "High Card Shield":
+                self.high_card_resistance_pct += int(upgrade.effect.split("%")[0])
+            elif upgrade.name == "Straight Shelter":
+                self.straight_resistance_pct += int(upgrade.effect.split("%")[0])
+            elif upgrade.name == "Flush Shelter":
+                self.flush_resistance_pct += int(upgrade.effect.split("%")[0])
             elif upgrade.name == "Increase Health %":
                 health_percentage_bonus += int(upgrade.effect.split("%")[0]) / 100.0
             elif upgrade.name == "Increase Discards":
@@ -246,6 +266,11 @@ class Player:
             elif relic.id == "fortress_heart":
                 self.armor += 25
                 self.max_health += 20
+            elif relic.id == "pattern_ward":
+                self.straight_resistance_pct += 18
+                self.flush_resistance_pct += 18
+                self.full_house_resistance_pct += 18
+                self.four_kind_resistance_pct += 18
 
         self.max_health = int(self.max_health * health_percentage_bonus)
         self.health = self.max_health
@@ -291,3 +316,44 @@ class Player:
 
     def get_armor_damage_reduction_pct(self) -> int:
         return int(round(self.get_armor_damage_reduction() * 100))
+
+    def get_rank_resistance_multiplier(self, cards: list[dict]) -> float:
+        if not cards:
+            return 1.0
+
+        total_cards = max(1, len(cards))
+        low_cards = sum(1 for card in cards if card["rank"] in {"2", "3", "4", "5", "6", "7"})
+        high_cards = sum(1 for card in cards if card["rank"] in {"10", "J", "Q", "K", "A", "15"})
+        low_ratio = low_cards / total_cards
+        high_ratio = high_cards / total_cards
+
+        low_multiplier = max(0.05, 1.0 - ((self.low_card_resistance_pct / 100.0) * low_ratio))
+        high_multiplier = max(0.05, 1.0 - ((self.high_card_resistance_pct / 100.0) * high_ratio))
+        return low_multiplier * high_multiplier
+
+    def get_hand_type_resistance_multiplier(self, hand_type: str) -> float:
+        multiplier = 1.0
+
+        if hand_type in {"straight", "straight flush", "royal flush"}:
+            multiplier *= max(0.05, 1.0 - (self.straight_resistance_pct / 100.0))
+        if hand_type in {"flush", "flush house", "straight flush", "royal flush"}:
+            multiplier *= max(0.05, 1.0 - (self.flush_resistance_pct / 100.0))
+        if hand_type in {"three of a kind", "full house", "flush house"}:
+            multiplier *= max(0.05, 1.0 - (self.full_house_resistance_pct / 100.0))
+        if hand_type in {"four of a kind", "five of a kind"}:
+            multiplier *= max(0.05, 1.0 - (self.four_kind_resistance_pct / 100.0))
+
+        return multiplier
+
+    def get_incoming_damage_multiplier(self, cards: list[dict], hand_type: str) -> float:
+        armor_multiplier = 1.0 - self.get_armor_damage_reduction()
+        return max(
+            0.0,
+            self.damage_taken_multiplier
+            * armor_multiplier
+            * self.get_rank_resistance_multiplier(cards)
+            * self.get_hand_type_resistance_multiplier(hand_type),
+        )
+
+    def mitigate_incoming_damage(self, damage: int, cards: list[dict], hand_type: str) -> int:
+        return max(0, int(round(damage * self.get_incoming_damage_multiplier(cards, hand_type))))
