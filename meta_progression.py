@@ -317,7 +317,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["offense_heavens_ladder"],
         "row": 3,
-        "column": 3,
+        "column": 4,
         "bonuses": {"flush_damage_pct": 12},
     },
     {
@@ -329,7 +329,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 1,
         "requires": ["offense_killing_rhythm", "offense_primal_weight"],
         "row": 3,
-        "column": 4,
+        "column": 2,
         "bonuses": {"damage_pct": 18, "damage_taken_pct": 10},
     },
     {
@@ -431,7 +431,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 2,
         "requires": ["defense_bastion_lore"],
         "row": 2,
-        "column": 3,
+        "column": 4,
         "bonuses": {"armor_flat": 10},
     },
     {
@@ -454,7 +454,7 @@ TALENT_DEFINITIONS = [
         "cost": 1,
         "max_ranks": 2,
         "requires": ["defense_iron_wall"],
-        "row": 2,
+        "row": 3,
         "column": 4,
         "bonuses": {"full_house_damage_pct": 12},
     },
@@ -466,8 +466,8 @@ TALENT_DEFINITIONS = [
         "cost": 1,
         "max_ranks": 1,
         "requires": ["defense_bastion_lore"],
-        "row": 3,
-        "column": 2,
+        "row": 2,
+        "column": 3,
         "bonuses": {"hand_size_flat": 1},
     },
     {
@@ -479,7 +479,7 @@ TALENT_DEFINITIONS = [
         "max_ranks": 1,
         "requires": ["defense_warden", "defense_overdraw"],
         "row": 3,
-        "column": 4,
+        "column": 2,
         "bonuses": {"health_pct": 15, "tiny_draw_pct": 18, "armor_flat": 15},
     },
     {
