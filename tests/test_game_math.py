@@ -541,3 +541,27 @@ def test_pattern_ward_reduces_damage_from_strong_hands():
     ]
 
     assert defender.mitigate_incoming_damage(100, incoming_cards, "straight flush") == 67
+
+
+def test_game_rejects_third_player():
+    game = Game()
+    game.add_player("alice")
+    game.add_player("bob")
+
+    try:
+        game.add_player("charlie")
+        assert False, "Expected game to reject a third player"
+    except ValueError as error:
+        assert str(error) == "Game is full"
+
+
+def test_game_chat_message_is_stored():
+    game = Game()
+    game.add_player("alice", avatar="🧙")
+
+    entry = game.add_chat_message("alice", "🧙", "hello there")
+
+    assert entry["author"] == "alice"
+    assert entry["avatar"] == "🧙"
+    assert entry["text"] == "hello there"
+    assert game.chat_messages[-1]["text"] == "hello there"

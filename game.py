@@ -2,6 +2,7 @@ import asyncio
 import random
 import time
 import traceback
+import uuid
 from itertools import product
 from typing import Dict, List
 
@@ -46,6 +47,7 @@ HAND_MULTIPLIERS = {
     "five of a kind": 8,
 }
 RANK_COMPRESSION_FACTOR = 2.0
+MAX_PLAYERS = 2
 
 
 class Game:
@@ -79,6 +81,7 @@ class Game:
         self.bot_difficulty: str | None = bot_difficulty
         self.public_visibility: bool = public_visibility
         self.bot_task: asyncio.Task | None = None
+        self.chat_messages: list[dict] = []
         self.lock = asyncio.Lock()
         self.deck = self.generate_deck()
         self.upgrade_store = UpgradeStore()
@@ -100,6 +103,8 @@ class Game:
         level_unlocks: list[str] | None = None,
         level_reward_bonuses: dict | None = None,
     ):
+        if player_name not in self.players and len(self.players) >= MAX_PLAYERS:
+            raise ValueError("Game is full")
         if player_name not in self.players:
             self.players[player_name] = Player(
                 player_name,
@@ -163,6 +168,20 @@ class Game:
             if candidate != player_id:
                 return candidate
         return None
+
+    def add_chat_message(self, author: str, avatar: str, text: str) -> dict:
+        entry = {
+            "id": str(uuid.uuid4()),
+            "scope": "game",
+            "game_id": None,
+            "author": author,
+            "avatar": avatar,
+            "text": text.strip(),
+            "created_at": int(time.time()),
+        }
+        self.chat_messages.append(entry)
+        self.chat_messages = self.chat_messages[-80:]
+        return entry
 
     def record_activity(self, player_id: str):
         if player_id in self.players:
@@ -609,7 +628,7 @@ class Game:
             base_values.append(damage_rank * total_modifier)
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)
-        flush_requirement = 4 if player.soft_flush_enabled else len(cards)
+        flush_requirement = 4 if player.soft_flush_enabled else 5
         is_flush = len(cards) >= flush_requirement and max(suit_counts.values()) >= flush_requirement
         sorted_ranks = sorted(set(ranks))
         is_straight = self.hand_is_straight(sorted_ranks, player)

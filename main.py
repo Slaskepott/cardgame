@@ -2,13 +2,13 @@ import asyncio
 import itertools
 import random
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict
 from game import Game, HAND_MULTIPLIERS, RANK_VALUES
-import stripe
 import os
 import urllib.parse
 import json
@@ -67,12 +67,6 @@ PEAK_STAT_KEYS = {
     "max_single_hand_damage",
     "max_win_health_remaining_pct",
 }
-
-class PlayerCurrency(Base):
-    __tablename__ = "player_currencies"
-    email = Column(String, primary_key=True, index=True)
-    slaskecoins = Column(Integer, default=0)
-
 
 class PlayerProgression(Base):
     __tablename__ = "player_progressions"
@@ -448,39 +442,6 @@ async def resolve_game_state(game_id: str) -> dict | None:
         resolution["reason"],
     )
 
-def addOrRemoveSlaskecoins(email: str, amount: int) -> int:
-    """
-    Adds (or subtracts, if amount is negative) slaskecoins for the given email.
-    If the user doesn't exist, they are created with an initial balance of 0.
-    Returns the new balance.
-    """
-    session = SessionLocal()
-    try:
-        # Find the user by email
-        player = session.query(PlayerCurrency).filter(PlayerCurrency.email == email).first()
-        if not player:
-            # Create new user entry if not found
-            player = PlayerCurrency(email=email, slaskecoins=0)
-            session.add(player)
-        # Update coin balance
-        player.slaskecoins += amount
-        # Optional: prevent negative balances
-        if player.slaskecoins < 0:
-            player.slaskecoins = 0
-        session.commit()
-        return player.slaskecoins
-    except Exception as e:
-        session.rollback()
-        raise e
-    finally:
-        session.close()
-
-
-
-
-stripe.api_key = os.environ.get("stripe_api_key")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -488,32 +449,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
-@app.get("/slaskecoins/{email}")
-def get_slaskecoins(email: str) -> int:
-    # Decode the email in case it's percent-encoded
-    decoded_email = decode_email(email)
-    print("Decoded email:", decoded_email)
-    
-    session = SessionLocal()
-    try:
-        # Print the entire database records with email details
-        all_players = session.query(PlayerCurrency).all()
-        print("Entire database:")
-        for record in all_players:
-            # Assuming the PlayerCurrency model has an 'email' attribute
-            print("Record:", record, "Email:", getattr(record, "email", "No email attribute"))
-        
-        # Query for the specific player using the decoded email
-        player = session.query(PlayerCurrency).filter(PlayerCurrency.email == decoded_email).first()
-        
-        # Print the session object and the queried player
-        print("Session object:", session)
-        print("Queried player:", player)
-        
-        return player.slaskecoins if player else 0
-    finally:
-        session.close()
 
 
 @app.get("/meta/{email}")
@@ -623,26 +558,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.post("/pay")
-def create_payment(
-    amount: int = Body(...),
-    currency: str = Body("usd"),
-    description: str = Body("Payment from FastAPI"),
-    email: str = Body(...),
-):
-    try:
-        payment_intent = stripe.PaymentIntent.create(
-            amount=amount,
-            currency=currency,
-            description=description,
-        )
-        addOrRemoveSlaskecoins(email, 1000)
-        return {"client_secret": payment_intent.client_secret}
-    except Exception as e:
-        return {"error": str(e)}
-
 games: Dict[str, Game] = {}
+global_chat_messages: list[dict] = []
+
+
+def build_chat_message(scope: str, author: str, avatar: str, text: str, game_id: str | None = None) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "scope": scope,
+        "game_id": game_id,
+        "author": author,
+        "avatar": avatar,
+        "text": text.strip(),
+        "created_at": int(time.time()),
+    }
+
+
+def append_global_chat_message(author: str, avatar: str, text: str) -> dict:
+    entry = build_chat_message("global", author, avatar, text)
+    global_chat_messages.append(entry)
+    del global_chat_messages[:-80]
+    return entry
+
+
+@app.get("/chat/global")
+def get_global_chat():
+    return {"messages": global_chat_messages}
+
+
+@app.post("/chat/global")
+def post_global_chat_message(
+    author: str = Body(...),
+    text: str = Body(...),
+    avatar: str = Body("👤"),
+):
+    normalized_author = author.strip()
+    normalized_text = text.strip()
+    if not normalized_author:
+        return {"error": "Author is required"}
+    if not normalized_text:
+        return {"error": "Message is required"}
+    return {"message": append_global_chat_message(normalized_author, avatar, normalized_text)}
 
 BOT_IDENTITIES = {
     "easy": [
@@ -1240,7 +1196,7 @@ def list_games():
                 "players": list(game.players.keys()),
             }
             for game_id, game in games.items()
-            if game.public_visibility
+            if game.public_visibility and len(game.players) < 2
         ]
     }
 
@@ -1320,6 +1276,37 @@ def get_players(game_id: str):
         },
     }
 
+
+@app.get("/game/{game_id}/chat")
+def get_game_chat(game_id: str):
+    if game_id not in games:
+        return {"error": "Game not found"}
+    return {"messages": games[game_id].chat_messages}
+
+
+@app.post("/game/{game_id}/chat")
+async def post_game_chat_message(
+    game_id: str,
+    player_id: str = Body(...),
+    text: str = Body(...),
+):
+    if game_id not in games:
+        return {"error": "Game not found"}
+
+    game = games[game_id]
+    if player_id not in game.players:
+        return {"error": "Player not found"}
+
+    normalized_text = text.strip()
+    if not normalized_text:
+        return {"error": "Message is required"}
+
+    player = game.players[player_id]
+    entry = game.add_chat_message(player.name, player.avatar, normalized_text)
+    entry["game_id"] = game_id
+    await game.broadcast({"type": "chat_message", "message": entry})
+    return {"message": entry}
+
 @app.post("/game/create/{game_id}")
 def create_game(game_id: str):
     if game_id in games:
@@ -1341,16 +1328,21 @@ async def join_game(
     game = games[game_id]
     if not game.public_visibility:
         return {"error": "Game not found"}
+    if player_id not in game.players and len(game.players) >= 2:
+        return {"error": "Game is full"}
     decoded_email = decode_email(email) if email else None
     account_state = get_player_account_state(decoded_email)
-    game.add_player(
-        player_id,
-        account_email=decoded_email,
-        talent_bonuses=account_state["talent_bonuses"],
-        avatar=avatar,
-        level_unlocks=account_state["level_rewards"],
-        level_reward_bonuses=account_state["level_reward_bonuses"],
-    )
+    try:
+        game.add_player(
+            player_id,
+            account_email=decoded_email,
+            talent_bonuses=account_state["talent_bonuses"],
+            avatar=avatar,
+            level_unlocks=account_state["level_rewards"],
+            level_reward_bonuses=account_state["level_reward_bonuses"],
+        )
+    except ValueError as error:
+        return {"error": str(error)}
 
     print(f"Player {player_id} joined {game_id}. Waiting for WebSocket connection...")
 
