@@ -391,6 +391,23 @@ class Game:
         midpoint = 8
         return midpoint + (rank - midpoint) / RANK_COMPRESSION_FACTOR
 
+    def is_gap_straight_window(self, window: list[int], player: Player) -> bool:
+        if len(window) != 5:
+            return False
+        spread = window[-1] - window[0]
+        if spread == 4:
+            return True
+        return player.gap_straight_enabled and spread == 5
+
+    def hand_is_straight(self, sorted_ranks: list[int], player: Player) -> bool:
+        if len(sorted_ranks) < 5:
+            return False
+        for index in range(len(sorted_ranks) - 4):
+            window = sorted_ranks[index:index + 5]
+            if self.is_gap_straight_window(window, player):
+                return True
+        return sorted_ranks[-5:] == [2, 3, 4, 5, 14]
+
     def reroll_shop_selection(self, player_id: str) -> list[dict] | dict:
         rerolls_remaining = self.shop_rerolls_remaining.get(player_id, 0)
         if rerolls_remaining < 1:
@@ -592,19 +609,10 @@ class Game:
             base_values.append(damage_rank * total_modifier)
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)
-        is_flush = len(cards) >= 5 and max(suit_counts.values()) == len(cards)
+        flush_requirement = 4 if player.soft_flush_enabled else len(cards)
+        is_flush = len(cards) >= flush_requirement and max(suit_counts.values()) >= flush_requirement
         sorted_ranks = sorted(set(ranks))
-        is_straight = False
-
-        if len(sorted_ranks) >= 5:
-            for index in range(len(sorted_ranks) - 4):
-                window = sorted_ranks[index:index + 5]
-                if window[-1] - window[0] == 4 and len(window) == 5:
-                    is_straight = True
-                    break
-
-            if sorted_ranks[-5:] == [2, 3, 4, 5, 14]:
-                is_straight = True
+        is_straight = self.hand_is_straight(sorted_ranks, player)
 
         is_royal = is_flush and {10, 11, 12, 13, 14}.issubset(set(ranks))
         if is_royal:

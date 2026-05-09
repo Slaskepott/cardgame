@@ -810,6 +810,12 @@ def bot_upgrade_score(game: Game, bot_id: str, upgrade_dict: dict, difficulty: s
         score += amount * 0.12
     elif name == "Tiny Troublemakers":
         score += amount * 0.11
+    elif name == "Echo Hand":
+        score += amount * (0.22 if difficulty == "hard" else 0.18)
+    elif name == "Gap Straight":
+        score += 4.8 if difficulty == "hard" else 3.4
+    elif name == "Soft Flush":
+        score += 4.8 if difficulty == "hard" else 3.4
 
     return score / cost
 
@@ -910,16 +916,22 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         damage_details["resolved_cards"],
         hand_type,
     )
+    hits = 1
+    damage_instances = [actual_damage]
+    if player.play_twice_chance_pct > 0 and random.random() < (player.play_twice_chance_pct / 100.0):
+        hits = 2
+        damage_instances.append(actual_damage)
+    total_damage = sum(damage_instances)
     stat_changes = summarize_played_hand(selected_cards, hand_type)
-    stat_changes["damage_dealt"] = actual_damage
-    stat_changes["max_single_hand_damage"] = actual_damage
+    stat_changes["damage_dealt"] = total_damage
+    stat_changes["max_single_hand_damage"] = total_damage
 
     result = game.remove_selected_cards(player_id, selected_cards)
     if "error" in result:
         return result
     stat_changes.update(summarize_drawn_hand(result["new_hand"]))
 
-    opponent.health = max(0, opponent.health - actual_damage)
+    opponent.health = max(0, opponent.health - total_damage)
     if hand_type == "full house" and player.full_house_armor_gain > 0:
         player.armor += player.full_house_armor_gain
 
@@ -944,7 +956,10 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "type": "hand_played",
         "player": player_id,
         "cards": selected_cards,
-        "damage": actual_damage,
+        "damage": total_damage,
+        "damage_instances": damage_instances,
+        "hits": hits,
+        "double_play_triggered": hits > 1,
         "health_update": {p.name: p.health for p in game.players.values()},
         "max_health_update": {p.name: p.max_health for p in game.players.values()},
         "armor_update": {p.name: p.armor for p in game.players.values()},
@@ -988,7 +1003,7 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
 
     return {
         "message": f"{player_id} played a hand",
-        "damage": actual_damage,
+        "damage": total_damage,
         "multiplier": multiplier,
         "new_hand": result["new_hand"],
         "winner": winner,

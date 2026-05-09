@@ -17,7 +17,7 @@ from main import (
 )
 from player import Player
 from upgrades import Upgrade
-from meta_progression import evaluate_achievements
+from meta_progression import compute_talent_bonuses, evaluate_achievements
 import main as main_module
 from relics import get_relic_by_id
 
@@ -227,6 +227,60 @@ def test_flush_house_gets_both_flush_and_full_house_modifiers():
     assert hand_type == "flush house"
     assert multiplier == 9
     assert damage == 146
+
+
+def test_gap_straight_upgrade_allows_one_missing_rank():
+    game = Game()
+    player = Player("tester")
+    game.players[player.name] = player
+
+    selected_cards = [
+        {"rank": "2", "suit": "Fire"},
+        {"rank": "3", "suit": "Water"},
+        {"rank": "5", "suit": "Earth"},
+        {"rank": "6", "suit": "Air"},
+        {"rank": "7", "suit": "Fire"},
+    ]
+
+    _, hand_type_without, _ = game.calculate_damage(selected_cards, player.name)
+    assert hand_type_without == "high card"
+
+    player.upgrades = [make_upgrade("Gap Straight", "Straights Can Skip One Rank")]
+    player.apply_upgrades()
+    _, hand_type_with, multiplier_with = game.calculate_damage(selected_cards, player.name)
+
+    assert hand_type_with == "straight"
+    assert multiplier_with == 4
+
+
+def test_soft_flush_upgrade_allows_four_suited_cards():
+    game = Game()
+    player = Player("tester")
+    game.players[player.name] = player
+
+    selected_cards = [
+        {"rank": "2", "suit": "Fire"},
+        {"rank": "5", "suit": "Fire"},
+        {"rank": "7", "suit": "Fire"},
+        {"rank": "9", "suit": "Fire"},
+        {"rank": "K", "suit": "Water"},
+    ]
+
+    _, hand_type_without, _ = game.calculate_damage(selected_cards, player.name)
+    assert hand_type_without == "high card"
+
+    player.upgrades = [make_upgrade("Soft Flush", "Flushes Only Need 4 Suited Cards")]
+    player.apply_upgrades()
+    _, hand_type_with, multiplier_with = game.calculate_damage(selected_cards, player.name)
+
+    assert hand_type_with == "flush"
+    assert multiplier_with == 4
+
+
+def test_offense_encore_talent_adds_play_twice_chance():
+    bonuses = compute_talent_bonuses({"offense_encore": 2})
+
+    assert bonuses["play_twice_chance_pct"] == 10
 
 
 def test_reset_game_rotates_starter_and_awards_bonus_reroll_to_previous_second_player(monkeypatch):

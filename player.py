@@ -70,6 +70,9 @@ class Player:
         self.reroll_health_cost = 0
         self.full_house_armor_gain = 0
         self.repeated_suit_damage_bonus_pct = 0
+        self.gap_straight_enabled = False
+        self.soft_flush_enabled = False
+        self.play_twice_chance_pct = 0
         self.apply_upgrades()
         self.special_deck = self.build_special_deck()
 
@@ -189,6 +192,9 @@ class Player:
         self.reroll_health_cost = 0
         self.full_house_armor_gain = 0
         self.repeated_suit_damage_bonus_pct = 0
+        self.gap_straight_enabled = False
+        self.soft_flush_enabled = False
+        self.play_twice_chance_pct = float(self.talent_bonuses.get("play_twice_chance_pct", 0))
 
         health_percentage_bonus = 1.0 + (
             (self.talent_bonuses.get("health_pct", 0) + self.level_reward_bonuses.get("health_pct", 0))
@@ -215,6 +221,12 @@ class Player:
                 self.max_discards += int(upgrade.effect.split()[0])
             elif upgrade.name == "Increase Damage":
                 self.damage_modifier += int(upgrade.effect.split("%")[0]) / 100.0
+            elif upgrade.name == "Echo Hand":
+                self.play_twice_chance_pct += int(upgrade.effect.split("%")[0])
+            elif upgrade.name == "Gap Straight":
+                self.gap_straight_enabled = True
+            elif upgrade.name == "Soft Flush":
+                self.soft_flush_enabled = True
             elif upgrade.name == "Low Cards Specialist":
                 self.low_card_damage_modifier += int(upgrade.effect.split("%")[0]) / 100.0
             elif upgrade.name == "High Cards Specialist":

@@ -166,6 +166,22 @@ class UpgradeStore:
         self.add_upgrade(id_counter, "Tiny Troublemakers", 1, "epic", "+45% Chance To Draw 2 Or 3", 17)
         id_counter += 1
         self.add_upgrade(id_counter, "Tiny Troublemakers", 2, "legendary", "+90% Chance To Draw 2 Or 3", 28)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "Echo Hand", 1, "common", "+2% Chance To Play A Hand Twice", 4)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Echo Hand", 2, "uncommon", "+8% Chance To Play A Hand Twice", 8)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Echo Hand", 3, "rare", "+15% Chance To Play A Hand Twice", 13)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Echo Hand", 4, "epic", "+30% Chance To Play A Hand Twice", 20)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Echo Hand", 5, "legendary", "+50% Chance To Play A Hand Twice", 31)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "Gap Straight", 1, "legendary", "Straights Can Skip One Rank", 24)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Soft Flush", 1, "legendary", "Flushes Only Need 4 Suited Cards", 24)
 
 
     def add_upgrade(self, id, name, tier, rarity, effect, cost):
