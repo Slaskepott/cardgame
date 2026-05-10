@@ -182,6 +182,11 @@ class UpgradeStore:
         self.add_upgrade(id_counter, "Gap Straight", 1, "legendary", "Straights Can Skip One Rank", 24)
         id_counter += 1
         self.add_upgrade(id_counter, "Soft Flush", 1, "legendary", "Flushes Only Need 4 Suited Cards", 24)
+        id_counter += 1
+
+        self.add_upgrade(id_counter, "Grand Bazaar", 1, "epic", "+1 Shop Selection", 18)
+        id_counter += 1
+        self.add_upgrade(id_counter, "Grand Bazaar", 2, "legendary", "+3 Shop Selections", 30)
 
 
     def add_upgrade(self, id, name, tier, rarity, effect, cost):
@@ -194,15 +199,19 @@ class UpgradeStore:
     def get_all_upgrades(self):
         return self.upgrades
     
-    def get_selection_of_upgrades(self):
-        selection = set()
+    def get_selection_of_upgrades(self, selection_size=5):
+        selection = []
+        seen_ids = set()
         rarity_weights = {"common": 20, "uncommon": 10, "rare": 5, "epic": 3, "legendary": 1}
         rarities = list(self.upgrades.keys())
 
-        while len(selection) < 5:
+        while len(selection) < selection_size:
             chosen_rarity = random.choices(rarities, weights=[rarity_weights[r] for r in rarities], k=1)[0]
             if self.upgrades[chosen_rarity]:
                 upgrade = random.choice(self.upgrades[chosen_rarity])
-                selection.add(upgrade)
+                if upgrade.id in seen_ids:
+                    continue
+                selection.append(upgrade)
+                seen_ids.add(upgrade.id)
 
-        return list(selection)
+        return selection

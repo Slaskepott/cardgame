@@ -63,6 +63,7 @@ class Player:
         self.four_kind_resistance_pct = 0
         self.gold_gain_flat = 0
         self.shop_rerolls_flat = 0
+        self.shop_selection_size_bonus = 0
         self.damage_taken_multiplier = 1.0
         self.plasma_bonus_value = 0
         self.tiny_rank_damage_multiplier = 1.0
@@ -180,6 +181,7 @@ class Player:
         self.four_kind_resistance_pct = float(self.talent_bonuses.get("four_kind_resistance_pct", 0))
         self.gold_gain_flat = int(self.talent_bonuses.get("gold_gain_flat", 0))
         self.shop_rerolls_flat = int(self.talent_bonuses.get("shop_rerolls_flat", 0))
+        self.shop_selection_size_bonus = 0
         self.damage_taken_multiplier = max(
             0.1,
             1.0 + (self.talent_bonuses.get("damage_taken_pct", 0) / 100.0),
@@ -223,6 +225,8 @@ class Player:
                 self.damage_modifier += int(upgrade.effect.split("%")[0]) / 100.0
             elif upgrade.name == "Echo Hand":
                 self.play_twice_chance_pct += int(upgrade.effect.split("%")[0])
+            elif upgrade.name == "Grand Bazaar":
+                self.shop_selection_size_bonus += int(upgrade.effect.split()[0])
             elif upgrade.name == "Gap Straight":
                 self.gap_straight_enabled = True
             elif upgrade.name == "Soft Flush":

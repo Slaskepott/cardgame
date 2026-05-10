@@ -16,7 +16,7 @@ from main import (
     summarize_player_peaks,
 )
 from player import Player
-from upgrades import Upgrade
+from upgrades import Upgrade, UpgradeStore
 from meta_progression import compute_talent_bonuses, evaluate_achievements
 import main as main_module
 from relics import get_relic_by_id
@@ -313,6 +313,49 @@ def test_shop_reroll_selection_consumes_available_rerolls():
     assert len(rerolled_selection) == 5
     assert game.shop_rerolls_remaining["alice"] == 0
     assert game.reroll_shop_selection("alice") == {"error": "No rerolls remaining"}
+
+
+def test_upgrade_store_selection_preserves_pick_order(monkeypatch):
+    store = UpgradeStore()
+    picks = iter(store.upgrades["common"][:5])
+
+    monkeypatch.setattr(main_module.random, "choices", lambda *args, **kwargs: ["common"])
+    monkeypatch.setattr(main_module.random, "choice", lambda sequence: next(picks))
+    monkeypatch.setattr("upgrades.random.choices", lambda *args, **kwargs: ["common"])
+    monkeypatch.setattr("upgrades.random.choice", lambda sequence: next(picks))
+
+    selection = store.get_selection_of_upgrades(5)
+
+    assert [upgrade.id for upgrade in selection] == [upgrade.id for upgrade in store.upgrades["common"][:5]]
+
+
+def test_grand_bazaar_increases_shop_selection_size():
+    player = Player("tester")
+    player.upgrades = [make_upgrade("Grand Bazaar", "+3 Shop Selections")]
+    player.apply_upgrades()
+
+    assert player.shop_selection_size_bonus == 3
+
+
+def test_shop_reroll_selection_uses_player_specific_shop_selection_size(monkeypatch):
+    game = Game()
+    game.add_player("alice")
+    game.players["alice"].upgrades = [make_upgrade("Grand Bazaar", "+1 Shop Selection")]
+    game.players["alice"].apply_upgrades()
+    game.shop_rerolls_remaining = {"alice": 1}
+
+    requested_sizes: list[int] = []
+
+    def fake_get_selection(size=5):
+        requested_sizes.append(size)
+        return [make_upgrade(f"Offer {index}", f"+{index} Test") for index in range(size)]
+
+    monkeypatch.setattr(game.upgrade_store, "get_selection_of_upgrades", fake_get_selection)
+
+    rerolled_selection = game.reroll_shop_selection("alice")
+
+    assert requested_sizes == [6]
+    assert len(rerolled_selection) == 6
 
 
 def test_talent_shop_reroll_bonus_is_applied_to_initial_shop_rerolls():

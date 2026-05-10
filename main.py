@@ -768,6 +768,8 @@ def bot_upgrade_score(game: Game, bot_id: str, upgrade_dict: dict, difficulty: s
         score += amount * 0.11
     elif name == "Echo Hand":
         score += amount * (0.22 if difficulty == "hard" else 0.18)
+    elif name == "Grand Bazaar":
+        score += amount * (2.6 if difficulty == "hard" else 2.2 if difficulty == "medium" else 1.8)
     elif name == "Gap Straight":
         score += 4.8 if difficulty == "hard" else 3.4
     elif name == "Soft Flush":
@@ -1002,7 +1004,7 @@ async def run_bot_shop_phase(game_id: str):
 
     difficulty = game.bot_difficulty or "medium"
     player = game.players[bot_id]
-    offers = game.upgrade_store.get_selection_of_upgrades()
+    offers = game.upgrade_store.get_selection_of_upgrades(game.get_shop_selection_size(bot_id))
 
     while True:
         affordable = [upgrade for upgrade in offers if upgrade.cost <= player.gold]

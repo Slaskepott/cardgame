@@ -406,6 +406,11 @@ class Game:
             rerolls += 1
         return rerolls
 
+    def get_shop_selection_size(self, player_id: str) -> int:
+        player = self.players.get(player_id)
+        bonus = int(getattr(player, "shop_selection_size_bonus", 0)) if player else 0
+        return max(5, 5 + bonus)
+
     def get_compressed_rank_value(self, rank: int) -> float:
         midpoint = 8
         return midpoint + (rank - midpoint) / RANK_COMPRESSION_FACTOR
@@ -436,14 +441,18 @@ class Game:
         player = self.players.get(player_id)
         if player and player.reroll_health_cost > 0:
             player.health = max(1, player.health - player.reroll_health_cost)
-        store_selection = self.upgrade_store.get_selection_of_upgrades()
+        store_selection = self.upgrade_store.get_selection_of_upgrades(
+            self.get_shop_selection_size(player_id)
+        )
         return [upgrade.to_dict() for upgrade in store_selection]
 
     async def open_upgrade_store(self):
         self.start_shop_phase()
         for player_id, ws in self.websocket_connections.items():
             try:
-                store_selection = self.upgrade_store.get_selection_of_upgrades()
+                store_selection = self.upgrade_store.get_selection_of_upgrades(
+                    self.get_shop_selection_size(player_id)
+                )
                 serialized_upgrades = [upgrade.to_dict() for upgrade in store_selection]
 
                 await ws.send_json({
