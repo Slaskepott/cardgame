@@ -35,6 +35,10 @@ from meta_progression import (
 
 
 def get_database_url() -> str:
+    local_dev_flag = os.environ.get("SLASKECARDS_LOCAL_DEV")
+    if local_dev_flag and local_dev_flag != "0":
+        return "sqlite:///./slaskecards-local.db"
+
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
         # SQLAlchemy expects the canonical scheme even if a provider gives postgres://
@@ -49,7 +53,7 @@ def get_database_url() -> str:
             "?sslmode=require"
         )
 
-    raise RuntimeError("DATABASE_URL environment variable is required.")
+    return "sqlite:///./slaskecards-local.db"
 
 
 DATABASE_URL = get_database_url()
