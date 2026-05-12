@@ -586,6 +586,31 @@ def test_pattern_ward_reduces_damage_from_strong_hands():
     assert defender.mitigate_incoming_damage(100, incoming_cards, "straight flush") == 67
 
 
+def test_tidal_memory_only_adds_moderate_repeated_suit_damage():
+    game = Game()
+    baseline_player = Player("baseline")
+    relic_player = Player("relic")
+    relic_player.relics = [get_relic_by_id("tidal_memory")]
+    relic_player.apply_upgrades()
+    game.players[baseline_player.name] = baseline_player
+    game.players[relic_player.name] = relic_player
+
+    selected_cards = [
+      {"rank": "2", "suit": "Water"},
+      {"rank": "6", "suit": "Water"},
+      {"rank": "9", "suit": "Water"},
+      {"rank": "Q", "suit": "Water"},
+      {"rank": "A", "suit": "Water"},
+    ]
+
+    baseline_damage, _, _ = game.calculate_damage(selected_cards, baseline_player.name)
+    relic_damage, hand_type, _ = game.calculate_damage(selected_cards, relic_player.name)
+
+    assert hand_type == "flush"
+    assert relic_damage > baseline_damage
+    assert relic_damage < int(baseline_damage * 1.3)
+
+
 def test_game_rejects_third_player():
     game = Game()
     game.add_player("alice")

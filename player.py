@@ -272,7 +272,7 @@ class Player:
                 self.joker_draw_modifier += 1.5
                 self.reroll_health_cost += 6
             elif relic.id == "tidal_memory":
-                self.repeated_suit_damage_bonus_pct += 18
+                self.repeated_suit_damage_bonus_pct += 6
             elif relic.id == "overflow_chamber":
                 self.hand_size += 1
                 self.damage_modifier = max(0.4, self.damage_modifier - 0.2)
