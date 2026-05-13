@@ -371,6 +371,23 @@ class Game:
             "waiting_players": self.get_relic_waiting_players(),
         })
 
+    async def broadcast_battle_hands(self):
+        for player_id, ws in self.websocket_connections.items():
+            player = self.players.get(player_id)
+            if not player:
+                continue
+            try:
+                await ws.send_json({
+                    "type": "new_hand",
+                    "player": player_id,
+                    "cards": self.serialize_cards(player.hand),
+                    "next_player": self.get_current_player_id(),
+                    "remaining_discards": player.remaining_discards,
+                })
+            except Exception as error:
+                print(f"Failed to send refreshed hand to {player_id}: {error}")
+                traceback.print_exc()
+
     async def mark_shop_ready(self, player_id: str):
         self.shop_waiting_players.discard(player_id)
         self.shop_deadlines.pop(player_id, None)
@@ -382,6 +399,7 @@ class Game:
                 await self.open_relic_selection()
             else:
                 self.start_battle_phase()
+                await self.broadcast_battle_hands()
             await self.broadcast_match_state()
 
     async def mark_relic_ready(self, player_id: str):
@@ -390,6 +408,7 @@ class Game:
         await self.broadcast_relic_status()
         if not self.relic_waiting_players:
             self.start_battle_phase()
+            await self.broadcast_battle_hands()
             await self.broadcast_match_state()
 
     def get_round_order(self) -> list[str]:
