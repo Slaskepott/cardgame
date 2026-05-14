@@ -742,8 +742,7 @@ def unlock_talent(email: str, talent_id: str, element: str | None = None):
         if talent_definition and talent_definition.get("elemental_choice"):
             talent_elements[talent_id] = selected_element or talent_elements.get(talent_id) or "Fire"
 
-        if not specialization:
-            specialization = talent_definition["specialization"] if talent_definition else None
+        specialization = None
         talent_ranks[talent_id] = int(talent_ranks.get(talent_id, 0)) + 1
         achievements = evaluate_achievements(stats, achievements)
         save_progress_state(

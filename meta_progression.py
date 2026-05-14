@@ -370,6 +370,18 @@ TALENT_DEFINITIONS = [
         },
     },
     {
+        "id": "offense_endless_pressure",
+        "specialization": "offense",
+        "name": "Endless Pressure",
+        "description": "+1% overall damage per rank.",
+        "cost": 1,
+        "max_ranks": 999,
+        "requires": ["offense_capstone"],
+        "row": 5,
+        "column": 2,
+        "bonuses": {"damage_pct": 1},
+    },
+    {
         "id": "defense_root",
         "specialization": "defense",
         "name": "Thick Skin",
@@ -520,16 +532,28 @@ TALENT_DEFINITIONS = [
         "bonuses": {"health_pct": 18, "armor_flat": 30, "hand_size_flat": 1},
     },
     {
-        "id": "utility_root",
-        "specialization": "utility",
-        "name": "Quick Fingers",
-        "description": "+1 discard per rank.",
+        "id": "defense_deep_roots",
+        "specialization": "defense",
+        "name": "Deep Roots",
+        "description": "+1% max health per rank.",
         "cost": 1,
-        "max_ranks": 1,
+        "max_ranks": 999,
+        "requires": ["defense_capstone"],
+        "row": 6,
+        "column": 2,
+        "bonuses": {"health_pct": 1},
+    },
+    {
+        "id": "utility_crown_hustle",
+        "specialization": "utility",
+        "name": "Crown Hustle",
+        "description": "+7% queen, king, and ace draw chance per rank.",
+        "cost": 1,
+        "max_ranks": 2,
         "requires": [],
         "row": 0,
         "column": 2,
-        "bonuses": {"max_discards_flat": 1},
+        "bonuses": {"royal_draw_pct": 7},
     },
     {
         "id": "utility_deck_glance",
@@ -538,7 +562,7 @@ TALENT_DEFINITIONS = [
         "description": "+1 shop reroll.",
         "cost": 1,
         "max_ranks": 1,
-        "requires": ["utility_root"],
+        "requires": ["utility_crown_hustle"],
         "row": 1,
         "column": 0,
         "bonuses": {"shop_rerolls_flat": 1},
@@ -550,7 +574,7 @@ TALENT_DEFINITIONS = [
         "description": "Choose an element. +3% elemental damage and +8% elemental draw chance per rank.",
         "cost": 1,
         "max_ranks": 2,
-        "requires": ["utility_root"],
+        "requires": ["utility_crown_hustle"],
         "row": 1,
         "column": 2,
         "elemental_choice": {"damage_pct": 3, "draw_pct": 8},
@@ -604,16 +628,16 @@ TALENT_DEFINITIONS = [
         "bonuses": {"hand_size_flat": 1},
     },
     {
-        "id": "utility_crown_hustle",
+        "id": "utility_root",
         "specialization": "utility",
-        "name": "Crown Hustle",
-        "description": "+7% queen, king, and ace draw chance per rank.",
+        "name": "Quick Fingers",
+        "description": "+1 discard per rank.",
         "cost": 1,
-        "max_ranks": 2,
+        "max_ranks": 1,
         "requires": ["utility_arcane_filter"],
         "row": 2,
         "column": 4,
-        "bonuses": {"royal_draw_pct": 7},
+        "bonuses": {"max_discards_flat": 1},
     },
     {
         "id": "utility_loaded_dice",
@@ -634,7 +658,7 @@ TALENT_DEFINITIONS = [
         "description": "+25% Joker draw chance per rank.",
         "cost": 1,
         "max_ranks": 4,
-        "requires": ["utility_crown_hustle"],
+        "requires": ["utility_root"],
         "row": 3,
         "column": 4,
         "bonuses": {"joker_draw_pct": 25},
@@ -653,6 +677,18 @@ TALENT_DEFINITIONS = [
             "hand_size_flat": 1,
             "royal_draw_pct": 22,
         },
+    },
+    {
+        "id": "utility_stack_the_deck",
+        "specialization": "utility",
+        "name": "Stack The Deck",
+        "description": "+1% chance to draw 2 or 3 per rank.",
+        "cost": 1,
+        "max_ranks": 999,
+        "requires": ["utility_capstone"],
+        "row": 5,
+        "column": 2,
+        "bonuses": {"tiny_draw_pct": 1},
     },
 ]
 
@@ -854,7 +890,6 @@ def expand_talent_bonuses(definition: dict, selected_element: str | None) -> dic
 
 def decode_talent_state(raw_talents: list | dict | None) -> tuple[dict[str, int], str | None, dict[str, str]]:
     if isinstance(raw_talents, dict):
-        specialization = raw_talents.get("specialization")
         raw_elements = raw_talents.get("elements", {})
         talent_elements = (
             {
@@ -870,10 +905,10 @@ def decode_talent_state(raw_talents: list | dict | None) -> tuple[dict[str, int]
             ranks = raw_talents.get("ranks", {})
             return {
                 talent_id: int(rank) for talent_id, rank in ranks.items() if int(rank) > 0
-            }, specialization, talent_elements
+            }, None, talent_elements
 
         unlocked = raw_talents.get("unlocked", [])
-        return {talent_id: 1 for talent_id in list(unlocked or [])}, specialization, talent_elements
+        return {talent_id: 1 for talent_id in list(unlocked or [])}, None, talent_elements
 
     if isinstance(raw_talents, list):
         return {talent_id: 1 for talent_id in raw_talents}, None, {}
@@ -935,9 +970,6 @@ def can_unlock_talent(
     current_rank = int(current_ranks.get(talent_id, 0))
     if current_rank >= int(talent.get("max_ranks", 1)):
         return False, "Talent is already maxed"
-
-    if selected_specialization and talent["specialization"] != selected_specialization:
-        return False, "Specialization already chosen"
 
     missing_requirements = [
         required
