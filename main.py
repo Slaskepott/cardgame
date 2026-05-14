@@ -1129,11 +1129,12 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
     damage = damage_details["damage"]
     hand_type = damage_details["hand_type"]
     multiplier = damage_details["multiplier"]
-    actual_damage = opponent.mitigate_incoming_damage(
+    mitigation = opponent.get_incoming_damage_breakdown(
         damage,
         damage_details["resolved_cards"],
         hand_type,
     )
+    actual_damage = mitigation["final_damage"]
     hits = 1
     damage_instances = [actual_damage]
     if player.play_twice_chance_pct > 0 and random.random() < (player.play_twice_chance_pct / 100.0):
@@ -1175,6 +1176,10 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "player": player_id,
         "cards": selected_cards,
         "damage": total_damage,
+        "raw_damage": damage * hits,
+        "armor_mitigation_pct": mitigation["armor_reduction_pct"],
+        "rank_resistance_mitigation_pct": mitigation["rank_resistance_reduction_pct"],
+        "hand_type_mitigation_pct": mitigation["hand_type_resistance_reduction_pct"],
         "damage_instances": damage_instances,
         "hits": hits,
         "double_play_triggered": hits > 1,

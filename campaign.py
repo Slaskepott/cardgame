@@ -171,13 +171,14 @@ CAMPAIGN_NODES = [
         "type": "boss",
         "best_of": 9,
         "wins_to_clinch": 5,
-        "description": "Gap Straight enabled, +1 hand size, +18% straight damage.",
+        "description": "Gap Straight enabled, +50 health, +1 hand size, +18% straight damage.",
         "bot_name": "The Archivist of Gaps",
         "bot_avatar": "📚",
         "bot_difficulty": "hard",
         "mutators": {
             "bot": {
                 "gap_straight_enabled": True,
+                "health_flat": 50,
                 "hand_size_flat": 1,
                 "straight_damage_pct": 18,
             }
@@ -254,7 +255,7 @@ CAMPAIGN_NODES = [
         "type": "boss",
         "best_of": 9,
         "wins_to_clinch": 5,
-        "description": "Gap Straight enabled, Soft Flush enabled, starts with Plasma Lattice relic, +2 shop selections, +1 hand size.",
+        "description": "Gap Straight enabled, Soft Flush enabled, +75 health, starts with Plasma Lattice relic, +2 shop selections, +1 hand size.",
         "bot_name": "The House Edge",
         "bot_avatar": "🎰",
         "bot_difficulty": "hard",
@@ -262,6 +263,7 @@ CAMPAIGN_NODES = [
             "bot": {
                 "gap_straight_enabled": True,
                 "soft_flush_enabled": True,
+                "health_flat": 75,
                 "free_relic_id": "plasma_lattice",
                 "shop_selection_size_bonus": 2,
                 "hand_size_flat": 1,

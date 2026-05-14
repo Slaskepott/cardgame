@@ -461,5 +461,29 @@ class Player:
             * self.get_hand_type_resistance_multiplier(hand_type),
         )
 
+    def get_incoming_damage_breakdown(self, damage: int, cards: list[dict], hand_type: str) -> dict:
+        armor_reduction = self.get_armor_damage_reduction()
+        rank_resistance_multiplier = self.get_rank_resistance_multiplier(cards)
+        hand_type_resistance_multiplier = self.get_hand_type_resistance_multiplier(hand_type)
+        final_multiplier = max(
+            0.0,
+            self.damage_taken_multiplier
+            * (1.0 - armor_reduction)
+            * rank_resistance_multiplier
+            * hand_type_resistance_multiplier,
+        )
+        mitigated_damage = max(0, int(round(damage * final_multiplier)))
+        return {
+            "raw_damage": int(damage),
+            "final_damage": mitigated_damage,
+            "armor_reduction_pct": int(round(armor_reduction * 100)),
+            "rank_resistance_reduction_pct": int(round((1.0 - rank_resistance_multiplier) * 100)),
+            "hand_type_resistance_reduction_pct": int(
+                round((1.0 - hand_type_resistance_multiplier) * 100)
+            ),
+            "damage_taken_pct_modifier": int(round((self.damage_taken_multiplier - 1.0) * 100)),
+            "final_multiplier": final_multiplier,
+        }
+
     def mitigate_incoming_damage(self, damage: int, cards: list[dict], hand_type: str) -> int:
-        return max(0, int(round(damage * self.get_incoming_damage_multiplier(cards, hand_type))))
+        return self.get_incoming_damage_breakdown(damage, cards, hand_type)["final_damage"]

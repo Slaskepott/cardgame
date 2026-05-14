@@ -110,7 +110,7 @@ class UpgradeStore:
             id_counter += 1
             self.add_upgrade(id_counter, f"Increase {element} Draw", 4, "epic", f"+40% {element} Draw Chance", 16)
             id_counter += 1
-            self.add_upgrade(id_counter, f"Increase {element} Draw", 5, "legendary", f"+60% {element} Draw Chance", 23)
+            self.add_upgrade(id_counter, f"Increase {element} Draw", 5, "legendary", f"+125% {element} Draw Chance", 23)
             id_counter += 1
 
         # Card rank specialists
@@ -165,7 +165,7 @@ class UpgradeStore:
 
         self.add_upgrade(id_counter, "Tiny Troublemakers", 1, "epic", "+45% Chance To Draw 2 Or 3", 17)
         id_counter += 1
-        self.add_upgrade(id_counter, "Tiny Troublemakers", 2, "legendary", "+90% Chance To Draw 2 Or 3", 28)
+        self.add_upgrade(id_counter, "Tiny Troublemakers", 2, "legendary", "+115% Chance To Draw 2 Or 3", 28)
         id_counter += 1
 
         self.add_upgrade(id_counter, "Echo Hand", 1, "common", "+2% Chance To Play A Hand Twice", 4)

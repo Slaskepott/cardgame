@@ -112,6 +112,37 @@ def test_apply_upgrades_returns_armor_and_damage_reduction():
     assert payload["upgrades"][0]["name"] == "Increase Armor"
 
 
+def test_armor_only_reduces_25_damage_to_23_at_14_armor():
+    player = Player("tester")
+    player.armor = 14
+
+    mitigation = player.get_incoming_damage_breakdown(25, [], "high card")
+
+    assert mitigation["armor_reduction_pct"] == 8
+    assert mitigation["rank_resistance_reduction_pct"] == 0
+    assert mitigation["hand_type_resistance_reduction_pct"] == 0
+    assert mitigation["final_damage"] == 23
+
+
+def test_high_card_resistance_explains_damage_below_armor_only_case():
+    player = Player("tester", talent_bonuses={"high_card_resistance_pct": 14})
+    player.armor = 14
+
+    cards = [
+        {"rank": "10", "suit": "Fire"},
+        {"rank": "J", "suit": "Water"},
+        {"rank": "Q", "suit": "Earth"},
+        {"rank": "K", "suit": "Air"},
+        {"rank": "A", "suit": "Fire"},
+    ]
+    mitigation = player.get_incoming_damage_breakdown(25, cards, "high card")
+
+    assert mitigation["armor_reduction_pct"] == 8
+    assert mitigation["rank_resistance_reduction_pct"] == 14
+    assert mitigation["hand_type_resistance_reduction_pct"] == 0
+    assert mitigation["final_damage"] == 20
+
+
 def test_calculate_damage_applies_damage_and_elemental_modifiers():
     game = Game()
     player = Player("tester")
