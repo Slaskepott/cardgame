@@ -10,7 +10,7 @@ from fastapi import WebSocket
 
 from card import Card
 from player import Player
-from relics import Relic, get_relic_offer_set
+from relics import Relic, get_relic_by_id, get_relic_offer_set
 from upgrades import UpgradeStore
 
 
@@ -48,6 +48,13 @@ HAND_MULTIPLIERS = {
 }
 RANK_COMPRESSION_FACTOR = 2.0
 MAX_PLAYERS = 2
+RARITY_ORDER = {
+    "common": 0,
+    "uncommon": 1,
+    "rare": 2,
+    "epic": 3,
+    "legendary": 4,
+}
 
 
 class Game:
@@ -58,6 +65,11 @@ class Game:
         bot_player_id: str | None = None,
         bot_difficulty: str | None = None,
         public_visibility: bool = True,
+        best_of: int = 9,
+        wins_to_clinch: int = 5,
+        is_campaign_match: bool = False,
+        campaign_node_id: str | None = None,
+        campaign_mutators: dict | None = None,
     ):
         self.players: Dict[str, Player] = {}
         self.turn_index: int = 0
@@ -80,6 +92,11 @@ class Game:
         self.bot_player_id: str | None = bot_player_id
         self.bot_difficulty: str | None = bot_difficulty
         self.public_visibility: bool = public_visibility
+        self.best_of: int = best_of
+        self.wins_to_clinch: int = wins_to_clinch
+        self.is_campaign_match: bool = is_campaign_match
+        self.campaign_node_id: str | None = campaign_node_id
+        self.campaign_mutators: dict = dict(campaign_mutators or {})
         self.bot_task: asyncio.Task | None = None
         self.chat_messages: list[dict] = []
         self.lock = asyncio.Lock()
@@ -100,8 +117,10 @@ class Game:
         account_email: str | None = None,
         talent_bonuses: dict | None = None,
         avatar: str | None = None,
+        avatar_border: str | None = None,
         level_unlocks: list[str] | None = None,
         level_reward_bonuses: dict | None = None,
+        campaign_mutators: dict | None = None,
     ):
         if player_name not in self.players and len(self.players) >= MAX_PLAYERS:
             raise ValueError("Game is full")
@@ -111,8 +130,10 @@ class Game:
                 account_email=account_email,
                 talent_bonuses=talent_bonuses,
                 avatar=avatar,
+                avatar_border=avatar_border,
                 level_unlocks=level_unlocks,
                 level_reward_bonuses=level_reward_bonuses,
+                campaign_mutators=campaign_mutators,
             )
             self.last_activity[player_name] = time.time()
             self.relic_seen_ids_by_player[player_name] = set()
@@ -124,10 +145,14 @@ class Game:
             player.talent_bonuses = talent_bonuses or {}
         if avatar:
             player.avatar = avatar
+        if avatar_border is not None:
+            player.avatar_border = avatar_border
         if level_unlocks is not None:
             player.level_unlocks = list(level_unlocks)
         if level_reward_bonuses is not None:
             player.level_reward_bonuses = dict(level_reward_bonuses)
+        if campaign_mutators is not None:
+            player.campaign_mutators = dict(campaign_mutators)
         player.apply_upgrades()
         player.special_deck = player.build_special_deck()
         self.last_activity[player_name] = time.time()
@@ -278,11 +303,13 @@ class Game:
                 player_id: [relic.to_dict() for relic in player.relics]
                 for player_id, player in self.players.items()
             },
-            "wins_to_clinch": 5,
-            "best_of": 9,
+            "wins_to_clinch": self.wins_to_clinch,
+            "best_of": self.best_of,
             "match_winner": self.match_winner,
             "match_end_reason": self.match_end_reason,
             "is_bot_match": self.is_bot_match,
+            "is_campaign_match": self.is_campaign_match,
+            "campaign_node_id": self.campaign_node_id,
         }
 
     async def broadcast_match_state(self):
@@ -430,6 +457,26 @@ class Game:
         bonus = int(getattr(player, "shop_selection_size_bonus", 0)) if player else 0
         return max(5, 5 + bonus)
 
+    def get_shop_selection(self, player_id: str) -> list[dict]:
+        player = self.players.get(player_id)
+        selection_size = self.get_shop_selection_size(player_id)
+        selection = self.upgrade_store.get_selection_of_upgrades(selection_size)
+        minimum_rarity = getattr(player, "shop_guaranteed_min_rarity", None) if player else None
+        if minimum_rarity and not any(
+            RARITY_ORDER.get(upgrade.rarity, -1) >= RARITY_ORDER.get(minimum_rarity, 99)
+            for upgrade in selection
+        ):
+            eligible = [
+                candidate
+                for bucket in self.upgrade_store.get_all_upgrades().values()
+                for candidate in bucket
+                if RARITY_ORDER.get(candidate.rarity, -1) >= RARITY_ORDER.get(minimum_rarity, 99)
+                and candidate.id not in {entry.id for entry in selection}
+            ]
+            if eligible and selection:
+                selection[-1] = random.choice(eligible)
+        return [upgrade.to_dict() for upgrade in selection]
+
     def get_compressed_rank_value(self, rank: int) -> float:
         midpoint = 8
         return midpoint + (rank - midpoint) / RANK_COMPRESSION_FACTOR
@@ -460,24 +507,16 @@ class Game:
         player = self.players.get(player_id)
         if player and player.reroll_health_cost > 0:
             player.health = max(1, player.health - player.reroll_health_cost)
-        store_selection = self.upgrade_store.get_selection_of_upgrades(
-            self.get_shop_selection_size(player_id)
-        )
-        return [upgrade.to_dict() for upgrade in store_selection]
+        return self.get_shop_selection(player_id)
 
     async def open_upgrade_store(self):
         self.start_shop_phase()
         for player_id, ws in self.websocket_connections.items():
             try:
-                store_selection = self.upgrade_store.get_selection_of_upgrades(
-                    self.get_shop_selection_size(player_id)
-                )
-                serialized_upgrades = [upgrade.to_dict() for upgrade in store_selection]
-
                 await ws.send_json({
                     "type": "open_store",
                     "player": player_id,
-                    "upgrades": serialized_upgrades,
+                    "upgrades": self.get_shop_selection(player_id),
                     "waiting_players": self.get_shop_waiting_players(),
                     "rerolls_remaining": self.shop_rerolls_remaining.get(player_id, 0),
                     "health_update": {player.name: player.health for player in self.players.values()},
@@ -518,6 +557,17 @@ class Game:
 
         self.players[player_id].relics.append(relic)
         self.players[player_id].apply_upgrades()
+        return relic
+
+    def grant_relic(self, player_id: str, relic_id: str) -> Relic | None:
+        player = self.players.get(player_id)
+        relic = get_relic_by_id(relic_id)
+        if not player or not relic:
+            return None
+        if any(existing.id == relic.id for existing in player.relics):
+            return relic
+        player.relics.append(relic)
+        player.apply_upgrades()
         return relic
 
     async def apply_upgrades(self, player_id):

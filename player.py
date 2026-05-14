@@ -12,15 +12,19 @@ class Player:
         account_email: str | None = None,
         talent_bonuses: dict | None = None,
         avatar: str | None = None,
+        avatar_border: str | None = None,
         level_unlocks: list[str] | None = None,
         level_reward_bonuses: dict | None = None,
+        campaign_mutators: dict | None = None,
     ):
         self.name = name
         self.account_email = account_email
+        self.avatar_border = avatar_border or "default"
         self.avatar = avatar or "👤"
         self.talent_bonuses = talent_bonuses or {}
         self.level_unlocks = list(level_unlocks or [])
         self.level_reward_bonuses = level_reward_bonuses or {}
+        self.campaign_mutators = dict(campaign_mutators or {})
         self.max_health = 100
         self.health = self.max_health
         self.armor = 0
@@ -64,6 +68,7 @@ class Player:
         self.gold_gain_flat = 0
         self.shop_rerolls_flat = 0
         self.shop_selection_size_bonus = 0
+        self.shop_guaranteed_min_rarity = None
         self.damage_taken_multiplier = 1.0
         self.plasma_bonus_value = 0
         self.tiny_rank_damage_multiplier = 1.0
@@ -182,6 +187,7 @@ class Player:
         self.gold_gain_flat = int(self.talent_bonuses.get("gold_gain_flat", 0))
         self.shop_rerolls_flat = int(self.talent_bonuses.get("shop_rerolls_flat", 0))
         self.shop_selection_size_bonus = 0
+        self.shop_guaranteed_min_rarity = None
         self.damage_taken_multiplier = max(
             0.1,
             1.0 + (self.talent_bonuses.get("damage_taken_pct", 0) / 100.0),
@@ -287,6 +293,90 @@ class Player:
                 self.flush_resistance_pct += 18
                 self.full_house_resistance_pct += 18
                 self.four_kind_resistance_pct += 18
+
+        if self.campaign_mutators:
+            for element, bonus in self.campaign_mutators.get("element_draw_bonus", {}).items():
+                modifier_name = f"{str(element).lower()}_draw_modifier"
+                if hasattr(self, modifier_name):
+                    setattr(self, modifier_name, getattr(self, modifier_name) * (1.0 + float(bonus)))
+            for element, bonus in self.campaign_mutators.get("element_damage_bonus", {}).items():
+                modifier_name = f"{str(element).lower()}_damage_modifier"
+                if hasattr(self, modifier_name):
+                    setattr(self, modifier_name, getattr(self, modifier_name) * (1.0 + float(bonus)))
+            self.max_health += int(self.campaign_mutators.get("health_flat", 0))
+            self.armor += int(self.campaign_mutators.get("armor_flat", 0))
+            self.hand_size += int(self.campaign_mutators.get("hand_size_flat", 0))
+            self.max_discards += int(self.campaign_mutators.get("max_discards_flat", 0))
+            self.shop_rerolls_flat += int(self.campaign_mutators.get("shop_rerolls_flat", 0))
+            self.shop_selection_size_bonus += int(
+                self.campaign_mutators.get("shop_selection_size_bonus", 0)
+            )
+            self.gold_gain_flat += int(self.campaign_mutators.get("gold_gain_flat", 0))
+            self.damage_modifier *= 1.0 + (self.campaign_mutators.get("damage_pct", 0) / 100.0)
+            self.play_twice_chance_pct += float(
+                self.campaign_mutators.get("play_twice_chance_pct", 0)
+            )
+            self.low_card_resistance_pct += float(
+                self.campaign_mutators.get("low_card_resistance_pct", 0)
+            )
+            self.high_card_resistance_pct += float(
+                self.campaign_mutators.get("high_card_resistance_pct", 0)
+            )
+            self.straight_resistance_pct += float(
+                self.campaign_mutators.get("straight_resistance_pct", 0)
+            )
+            self.flush_resistance_pct += float(
+                self.campaign_mutators.get("flush_resistance_pct", 0)
+            )
+            self.full_house_resistance_pct += float(
+                self.campaign_mutators.get("full_house_resistance_pct", 0)
+            )
+            self.four_kind_resistance_pct += float(
+                self.campaign_mutators.get("four_kind_resistance_pct", 0)
+            )
+            self.low_card_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("low_card_damage_pct", 0) / 100.0
+            )
+            self.high_card_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("high_card_damage_pct", 0) / 100.0
+            )
+            self.straight_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("straight_damage_pct", 0) / 100.0
+            )
+            self.flush_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("flush_damage_pct", 0) / 100.0
+            )
+            self.water_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("water_damage_pct", 0) / 100.0
+            )
+            self.fire_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("fire_damage_pct", 0) / 100.0
+            )
+            self.air_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("air_damage_pct", 0) / 100.0
+            )
+            self.earth_damage_modifier *= 1.0 + (
+                self.campaign_mutators.get("earth_damage_pct", 0) / 100.0
+            )
+            self.water_draw_modifier *= 1.0 + (
+                self.campaign_mutators.get("water_draw_pct", 0) / 100.0
+            )
+            self.fire_draw_modifier *= 1.0 + (
+                self.campaign_mutators.get("fire_draw_pct", 0) / 100.0
+            )
+            self.air_draw_modifier *= 1.0 + (
+                self.campaign_mutators.get("air_draw_pct", 0) / 100.0
+            )
+            self.earth_draw_modifier *= 1.0 + (
+                self.campaign_mutators.get("earth_draw_pct", 0) / 100.0
+            )
+            if self.campaign_mutators.get("gap_straight_enabled"):
+                self.gap_straight_enabled = True
+            if self.campaign_mutators.get("soft_flush_enabled"):
+                self.soft_flush_enabled = True
+            minimum_rarity = self.campaign_mutators.get("shop_guaranteed_min_rarity")
+            if isinstance(minimum_rarity, str):
+                self.shop_guaranteed_min_rarity = minimum_rarity
 
         self.max_health = int(self.max_health * health_percentage_bonus)
         self.health = self.max_health

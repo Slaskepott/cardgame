@@ -195,6 +195,14 @@ ACHIEVEMENT_DEFINITIONS = [
     {"id": "elo_1600", "name": "Ranked Spark", "description": "Reach 1600 Elo.", "stat": "elo_rating", "target": 1600, "points": 1},
     {"id": "elo_1800", "name": "Ladder Predator", "description": "Reach 1800 Elo.", "stat": "elo_rating", "target": 1800, "points": 2},
     {"id": "elo_2000", "name": "Table Myth", "description": "Reach 2000 Elo.", "stat": "elo_rating", "target": 2000, "points": 3},
+    {"id": "campaign_nodes_1", "name": "First Step Into The House", "description": "Clear 1 campaign node.", "stat": "campaign_nodes_cleared", "target": 1, "points": 1},
+    {"id": "campaign_nodes_4", "name": "Region Breaker", "description": "Clear 4 campaign nodes.", "stat": "campaign_nodes_cleared", "target": 4, "points": 2},
+    {"id": "campaign_nodes_8", "name": "Path Reader", "description": "Clear 8 campaign nodes.", "stat": "campaign_nodes_cleared", "target": 8, "points": 2},
+    {"id": "campaign_nodes_12", "name": "House Cleared", "description": "Clear all 12 campaign nodes.", "stat": "campaign_nodes_cleared", "target": 12, "points": 3},
+    {"id": "campaign_bosses_1", "name": "Boss Breaker", "description": "Defeat 1 campaign boss.", "stat": "campaign_bosses_defeated", "target": 1, "points": 1},
+    {"id": "campaign_bosses_2", "name": "Boss Hunter", "description": "Defeat 2 campaign bosses.", "stat": "campaign_bosses_defeated", "target": 2, "points": 2},
+    {"id": "campaign_bosses_3", "name": "Boss Exterminator", "description": "Defeat all 3 campaign bosses.", "stat": "campaign_bosses_defeated", "target": 3, "points": 3},
+    {"id": "campaign_completion_1", "name": "Beat The House Edge", "description": "Complete the campaign.", "stat": "campaign_completions", "target": 1, "points": 3},
 ]
 
 
@@ -670,6 +678,9 @@ DEFAULT_STATS = {
     "upgrades_bought": 0,
     "experience_total": 0,
     "elo_rating": 1500,
+    "campaign_nodes_cleared": 0,
+    "campaign_bosses_defeated": 0,
+    "campaign_completions": 0,
 }
 
 
