@@ -141,6 +141,7 @@ LEVEL_MILESTONE_DEFINITIONS = [
 
 
 ACHIEVEMENT_DEFINITIONS = [
+    {"id": "tutorial_complete_1", "name": "Table Ready", "description": "Complete the tutorial.", "stat": "tutorial_completions", "target": 1, "points": 1},
     {"id": "hands_25", "name": "Warm-Up Duelist", "description": "Play 25 hands.", "stat": "hands_played", "target": 25, "points": 1},
     {"id": "hands_100", "name": "Table Veteran", "description": "Play 100 hands.", "stat": "hands_played", "target": 100, "points": 2},
     {"id": "hands_300", "name": "Sleeves Rolled Up", "description": "Play 300 hands.", "stat": "hands_played", "target": 300, "points": 3},
@@ -694,6 +695,7 @@ TALENT_DEFINITIONS = [
 
 
 DEFAULT_STATS = {
+    "tutorial_completions": 0,
     "hands_played": 0,
     "games_won": 0,
     "games_lost": 0,

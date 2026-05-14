@@ -216,14 +216,15 @@ CAMPAIGN_NODES = [
         "type": "bo3",
         "best_of": 3,
         "wins_to_clinch": 2,
-        "description": "+25% Fire/Air/Earth/Water draw chance and +12% Fire/Air/Earth/Water damage.",
+        "description": "+35% Fire draw chance, +35% Water draw chance, +18% straight damage, +18% flush damage.",
         "bot_name": "Prism Tax",
         "bot_avatar": "🔷",
         "bot_difficulty": "hard",
         "mutators": {
             "bot": {
-                "element_draw_bonus": {"Fire": 0.25, "Air": 0.25, "Earth": 0.25, "Water": 0.25},
-                "element_damage_bonus": {"Fire": 0.12, "Air": 0.12, "Earth": 0.12, "Water": 0.12},
+                "element_draw_bonus": {"Fire": 0.35, "Water": 0.35},
+                "straight_damage_pct": 18,
+                "flush_damage_pct": 18,
             }
         },
     },

@@ -807,6 +807,55 @@ def reset_talents(email: str):
         session.close()
 
 
+@app.post("/meta/{email}/tutorial/complete")
+def complete_tutorial(email: str):
+    normalized_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, normalized_email)
+        (
+            stats,
+            achievements,
+            talent_ranks,
+            specialization,
+            talent_elements,
+            campaign_state,
+            profile_state,
+        ) = read_progress_state(progression)
+
+        if int(stats.get("tutorial_completions", 0)) < 1:
+            previous_achievements = list(achievements)
+            stats["tutorial_completions"] = 1
+            achievements = evaluate_achievements(stats, achievements)
+            experience_gain = calculate_experience_gain(
+                {"tutorial_completions": 1},
+                previous_achievements,
+                achievements,
+            )
+            if experience_gain > 0:
+                stats["experience_total"] = int(stats.get("experience_total", 0)) + experience_gain
+
+            save_progress_state(
+                progression,
+                stats,
+                achievements,
+                talent_ranks,
+                specialization,
+                talent_elements,
+                campaign_state,
+                profile_state,
+            )
+            session.commit()
+            session.refresh(progression)
+
+        return build_progress_snapshot(progression)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 
 
 # Enable CORS
