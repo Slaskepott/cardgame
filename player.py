@@ -2,6 +2,7 @@ from typing import List
 
 from card import Card
 from relics import Relic
+from spells import get_spell_definition
 from upgrades import Upgrade
 
 
@@ -16,6 +17,7 @@ class Player:
         level_unlocks: list[str] | None = None,
         level_reward_bonuses: dict | None = None,
         campaign_mutators: dict | None = None,
+        equipped_spell_ids: list[str] | None = None,
     ):
         self.name = name
         self.account_email = account_email
@@ -25,6 +27,12 @@ class Player:
         self.level_unlocks = list(level_unlocks or [])
         self.level_reward_bonuses = level_reward_bonuses or {}
         self.campaign_mutators = dict(campaign_mutators or {})
+        self.equipped_spell_ids = [
+            spell_id for spell_id in list(equipped_spell_ids or []) if get_spell_definition(spell_id)
+        ]
+        self.used_spell_ids: set[str] = set()
+        self.prepared_spell_id: str | None = None
+        self.next_incoming_spell_reduction_pct = 0
         self.max_health = 100
         self.health = self.max_health
         self.armor = 0
@@ -87,8 +95,55 @@ class Player:
         self.health = self.max_health
         self.special_deck = self.build_special_deck()
         self.remaining_discards = self.max_discards
+        self.prepared_spell_id = None
         while len(self.hand) > self.hand_size:
             self.hand.pop()
+
+    def get_match_spells_payload(self) -> list[dict]:
+        payload = []
+        for spell_id in self.equipped_spell_ids:
+            definition = get_spell_definition(spell_id)
+            if not definition:
+                continue
+            payload.append(
+                {
+                    "id": definition["id"],
+                    "name": definition["name"],
+                    "description": definition["description"],
+                    "effect_type": definition["effect_type"],
+                    "animation": definition["animation"],
+                    "used": spell_id in self.used_spell_ids,
+                    "prepared": self.prepared_spell_id == spell_id,
+                }
+            )
+        return payload
+
+    def can_prepare_spell(self, spell_id: str) -> tuple[bool, str | None]:
+        if spell_id not in self.equipped_spell_ids:
+            return False, "Spell not equipped"
+        if spell_id in self.used_spell_ids:
+            return False, "Spell already used this match"
+        if self.prepared_spell_id and self.prepared_spell_id != spell_id:
+            return False, "Another spell is already prepared"
+        return True, None
+
+    def prepare_spell(self, spell_id: str):
+        self.prepared_spell_id = spell_id
+
+    def consume_prepared_spell(self) -> str | None:
+        spell_id = self.prepared_spell_id
+        if spell_id:
+            self.used_spell_ids.add(spell_id)
+        self.prepared_spell_id = None
+        return spell_id
+
+    def spend_spell(self, spell_id: str):
+        self.used_spell_ids.add(spell_id)
+        if self.prepared_spell_id == spell_id:
+            self.prepared_spell_id = None
+
+    def clear_prepared_spell(self):
+        self.prepared_spell_id = None
 
     def get_available_suits(self) -> list[str]:
         suits = ["Fire", "Air", "Earth", "Water"]
@@ -465,13 +520,14 @@ class Player:
         armor_reduction = self.get_armor_damage_reduction()
         rank_resistance_multiplier = self.get_rank_resistance_multiplier(cards)
         hand_type_resistance_multiplier = self.get_hand_type_resistance_multiplier(hand_type)
+        spell_delay_multiplier = max(0.0, 1.0 - (self.next_incoming_spell_reduction_pct / 100.0))
         final_multiplier = max(
             0.0,
             self.damage_taken_multiplier
             * (1.0 - armor_reduction)
             * rank_resistance_multiplier
             * hand_type_resistance_multiplier,
-        )
+        ) * spell_delay_multiplier
         mitigated_damage = max(0, int(round(damage * final_multiplier)))
         return {
             "raw_damage": int(damage),
@@ -481,6 +537,7 @@ class Player:
             "hand_type_resistance_reduction_pct": int(
                 round((1.0 - hand_type_resistance_multiplier) * 100)
             ),
+            "spell_reduction_pct": int(self.next_incoming_spell_reduction_pct),
             "damage_taken_pct_modifier": int(round((self.damage_taken_multiplier - 1.0) * 100)),
             "final_multiplier": final_multiplier,
         }

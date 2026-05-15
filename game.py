@@ -121,6 +121,7 @@ class Game:
         level_unlocks: list[str] | None = None,
         level_reward_bonuses: dict | None = None,
         campaign_mutators: dict | None = None,
+        equipped_spell_ids: list[str] | None = None,
     ):
         if player_name not in self.players and len(self.players) >= MAX_PLAYERS:
             raise ValueError("Game is full")
@@ -134,6 +135,7 @@ class Game:
                 level_unlocks=level_unlocks,
                 level_reward_bonuses=level_reward_bonuses,
                 campaign_mutators=campaign_mutators,
+                equipped_spell_ids=equipped_spell_ids,
             )
             self.last_activity[player_name] = time.time()
             self.relic_seen_ids_by_player[player_name] = set()
@@ -153,6 +155,8 @@ class Game:
             player.level_reward_bonuses = dict(level_reward_bonuses)
         if campaign_mutators is not None:
             player.campaign_mutators = dict(campaign_mutators)
+        if equipped_spell_ids is not None:
+            player.equipped_spell_ids = list(equipped_spell_ids)
         player.apply_upgrades()
         player.special_deck = player.build_special_deck()
         self.last_activity[player_name] = time.time()
@@ -235,6 +239,7 @@ class Game:
         self.relic_choices_by_player = {}
         for player_id in self.players.keys():
             player = self.players[player_id]
+            player.clear_prepared_spell()
             while len(player.hand) < player.hand_size:
                 dealt = self.deal_card(player_id)
                 if isinstance(dealt, dict) and dealt.get("error"):
@@ -258,6 +263,8 @@ class Game:
             player_name: self.get_initial_shop_rerolls(player_name)
             for player_name in self.players.keys()
         }
+        for player in self.players.values():
+            player.clear_prepared_spell()
 
     def start_relic_phase(self):
         if len(self.players) < 2:
@@ -271,6 +278,8 @@ class Game:
         self.shop_deadlines = {}
         self.shop_rerolls_remaining = {}
         self.relic_choices_by_player = {}
+        for player in self.players.values():
+            player.clear_prepared_spell()
         for player_id, player in self.players.items():
             seen_ids = self.relic_seen_ids_by_player.setdefault(player_id, set())
             excluded_ids = seen_ids.union({relic.id for relic in player.relics})
@@ -301,6 +310,10 @@ class Game:
             "relic_waiting_players": self.get_relic_waiting_players(),
             "relics_by_player": {
                 player_id: [relic.to_dict() for relic in player.relics]
+                for player_id, player in self.players.items()
+            },
+            "spells_by_player": {
+                player_id: player.get_match_spells_payload()
                 for player_id, player in self.players.items()
             },
             "wins_to_clinch": self.wins_to_clinch,

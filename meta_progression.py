@@ -36,10 +36,10 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "description": "Your cards gain a cleaner metallic edge treatment.",
     },
     {
-        "id": "ember_instinct",
+        "id": "spell_second_breath",
         "level": 4,
-        "name": "Ember Instinct",
-        "description": "+6% Fire draw chance.",
+        "name": "Second Breath",
+        "description": "Unlocks the spell Second Breath: heal 10 health immediately once per match.",
     },
     {
         "id": "joker",
@@ -54,10 +54,10 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "description": "Your hand picks up a richer polished finish.",
     },
     {
-        "id": "sky_whisper",
+        "id": "spell_heavy_blow",
         "level": 7,
-        "name": "Sky Whisper",
-        "description": "+6% Air draw chance.",
+        "name": "Heavy Blow",
+        "description": "Unlocks the spell Heavy Blow: your next 1-card hand this turn deals 8x damage.",
     },
     {
         "id": "killer_instinct",
@@ -66,10 +66,10 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "description": "+2% overall damage.",
     },
     {
-        "id": "deep_current",
+        "id": "spell_perfect_pairing",
         "level": 9,
-        "name": "Deep Current",
-        "description": "+6% Water draw chance.",
+        "name": "Perfect Pairing",
+        "description": "Unlocks the spell Perfect Pairing: your next hand this turn counts as at least two pair.",
     },
     {
         "id": "flame",
@@ -78,10 +78,10 @@ LEVEL_MILESTONE_DEFINITIONS = [
         "description": "Adds The Flame to your round pool. It counts as any Fire card.",
     },
     {
-        "id": "stone_memory",
+        "id": "spell_stone_delay",
         "level": 11,
-        "name": "Stone Memory",
-        "description": "+6% Earth draw chance.",
+        "name": "Stone Delay",
+        "description": "Unlocks the spell Stone Delay: reduce the next incoming hit by 25% once per match.",
     },
     {
         "id": "constellation_foil",
@@ -333,7 +333,7 @@ TALENT_DEFINITIONS = [
         "id": "offense_encore",
         "specialization": "offense",
         "name": "Encore",
-        "description": "+5% chance to play a hand twice per rank.",
+        "description": "+5% chance to play a hand twice per rank. Unlocks the Overcharge spell.",
         "cost": 1,
         "max_ranks": 2,
         "requires": ["offense_primal_weight"],
@@ -507,7 +507,7 @@ TALENT_DEFINITIONS = [
         "id": "defense_last_stand",
         "specialization": "defense",
         "name": "Last Stand",
-        "description": "+15 armor, +18% chance to draw 2 or 3, and +14% full house/four-of-a-kind resistance.",
+        "description": "+15 armor, +18% chance to draw 2 or 3, and +14% full house/four-of-a-kind resistance. Unlocks the Blood Price spell.",
         "cost": 1,
         "max_ranks": 1,
         "requires": ["defense_warden", "defense_overdraw"],
@@ -632,7 +632,7 @@ TALENT_DEFINITIONS = [
         "id": "utility_root",
         "specialization": "utility",
         "name": "Quick Fingers",
-        "description": "+1 discard per rank.",
+        "description": "+1 discard per rank. Unlocks the Double Stake spell.",
         "cost": 1,
         "max_ranks": 1,
         "requires": ["utility_arcane_filter"],
@@ -800,16 +800,8 @@ def compute_level_reward_bonuses(reward_ids: list[str] | None) -> dict[str, int]
     if "iron_training" in reward_set:
         bonuses["health_flat"] += 6
         bonuses["armor_flat"] += 8
-    if "ember_instinct" in reward_set:
-        bonuses["fire_draw_pct"] += 6
-    if "sky_whisper" in reward_set:
-        bonuses["air_draw_pct"] += 6
     if "killer_instinct" in reward_set:
         bonuses["damage_pct"] += 2
-    if "deep_current" in reward_set:
-        bonuses["water_draw_pct"] += 6
-    if "stone_memory" in reward_set:
-        bonuses["earth_draw_pct"] += 6
     if "battle_hardened" in reward_set:
         bonuses["health_flat"] += 10
         bonuses["armor_flat"] += 12

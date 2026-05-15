@@ -42,6 +42,14 @@ from campaign import (
     normalize_profile_state,
     apply_campaign_clear,
 )
+from spells import (
+    MAX_EQUIPPED_SPELLS,
+    build_spell_snapshot,
+    compute_unlocked_spell_ids,
+    default_spell_state,
+    get_spell_definition,
+    normalize_spell_state,
+)
 
 
 def get_database_url() -> str:
@@ -90,6 +98,7 @@ class PlayerProgression(Base):
     talents_json = Column(Text, default="[]")
     campaign_json = Column(Text, default="{}")
     profile_json = Column(Text, default="{}")
+    spells_json = Column(Text, default="{}")
 
 
 def decode_email(email: str) -> str:
@@ -117,6 +126,8 @@ def ensure_progression_columns():
         statements.append("ALTER TABLE player_progressions ADD COLUMN campaign_json TEXT DEFAULT '{}'")
     if "profile_json" not in existing_columns:
         statements.append("ALTER TABLE player_progressions ADD COLUMN profile_json TEXT DEFAULT '{}'")
+    if "spells_json" not in existing_columns:
+        statements.append("ALTER TABLE player_progressions ADD COLUMN spells_json TEXT DEFAULT '{}'")
 
     if not statements:
         return
@@ -142,6 +153,7 @@ def get_or_create_progress(session, email: str) -> PlayerProgression:
         talents_json="[]",
         campaign_json=json.dumps(default_campaign_progress()),
         profile_json=json.dumps(default_profile_state()),
+        spells_json=json.dumps(default_spell_state()),
     )
     session.add(progression)
     session.flush()
@@ -158,6 +170,9 @@ def read_progress_state(progression: PlayerProgression):
     profile_state = normalize_profile_state(
         load_json_blob(getattr(progression, "profile_json", None), default_profile_state())
     )
+    spell_state = normalize_spell_state(
+        load_json_blob(getattr(progression, "spells_json", None), default_spell_state())
+    )
     talent_ranks, specialization, talent_elements = decode_talent_state(talents_state)
     return (
         stats,
@@ -167,6 +182,7 @@ def read_progress_state(progression: PlayerProgression):
         talent_elements,
         campaign_state,
         profile_state,
+        spell_state,
     )
 
 
@@ -179,6 +195,7 @@ def save_progress_state(
     talent_elements: dict[str, str] | None = None,
     campaign_state: dict | None = None,
     profile_state: dict | None = None,
+    spell_state: dict | None = None,
 ):
     progression.stats_json = json.dumps(stats)
     progression.achievements_json = json.dumps(sorted(set(achievements)))
@@ -187,19 +204,28 @@ def save_progress_state(
     )
     progression.campaign_json = json.dumps(normalize_campaign_progress(campaign_state))
     progression.profile_json = json.dumps(normalize_profile_state(profile_state))
+    progression.spells_json = json.dumps(normalize_spell_state(spell_state))
 
 
 def build_progress_snapshot(progression: PlayerProgression) -> dict:
-    stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state = read_progress_state(
+    stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state, spell_state = read_progress_state(
         progression
     )
     snapshot = build_meta_snapshot(stats, achievements, talent_ranks, specialization, talent_elements)
+    level_reward_ids = unlocked_level_reward_ids(snapshot["level"])
+    unlocked_spell_ids = compute_unlocked_spell_ids(level_reward_ids, talent_ranks, campaign_state)
+    normalized_spell_state = normalize_spell_state(spell_state, unlocked_spell_ids)
     snapshot["campaign_progress"] = campaign_state
     snapshot["campaign_nodes"] = list_campaign_nodes()
     snapshot["unlocked_icons"] = profile_state["unlocked_icons"]
     snapshot["unlocked_borders"] = profile_state["unlocked_borders"]
     snapshot["selected_icon"] = profile_state["selected_icon"]
     snapshot["selected_border"] = profile_state["selected_border"]
+    snapshot["spells"] = build_spell_snapshot(
+        unlocked_spell_ids,
+        normalized_spell_state["equipped_spell_ids"],
+    )
+    snapshot["equipped_spell_ids"] = normalized_spell_state["equipped_spell_ids"]
     return snapshot
 
 
@@ -216,6 +242,7 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         ) = read_progress_state(
             progression
         )
@@ -238,6 +265,7 @@ def update_player_progress(email: str, stat_changes: dict[str, int]) -> dict:
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         )
         session.commit()
         session.refresh(progression)
@@ -299,11 +327,12 @@ def update_match_progress(
                 winner_talent_elements,
                 winner_campaign_state,
                 winner_profile_state,
+                winner_spell_state,
             ) = read_progress_state(winner_progress)
             winner_previous_achievements = list(winner_achievements)
             winner_rating = int(winner_stats.get("elo_rating", 1500))
         else:
-            winner_stats = winner_achievements = winner_talent_ranks = winner_specialization = winner_previous_achievements = winner_talent_elements = winner_campaign_state = winner_profile_state = None
+            winner_stats = winner_achievements = winner_talent_ranks = winner_specialization = winner_previous_achievements = winner_talent_elements = winner_campaign_state = winner_profile_state = winner_spell_state = None
 
         if loser_progress:
             (
@@ -314,11 +343,12 @@ def update_match_progress(
                 loser_talent_elements,
                 loser_campaign_state,
                 loser_profile_state,
+                loser_spell_state,
             ) = read_progress_state(loser_progress)
             loser_previous_achievements = list(loser_achievements)
             loser_rating = int(loser_stats.get("elo_rating", 1500))
         else:
-            loser_stats = loser_achievements = loser_talent_ranks = loser_specialization = loser_previous_achievements = loser_talent_elements = loser_campaign_state = loser_profile_state = None
+            loser_stats = loser_achievements = loser_talent_ranks = loser_specialization = loser_previous_achievements = loser_talent_elements = loser_campaign_state = loser_profile_state = loser_spell_state = None
 
         winner_delta = calculate_elo_delta(winner_rating, loser_rating, 1.0)
         loser_delta = calculate_elo_delta(loser_rating, winner_rating, 0.0)
@@ -349,6 +379,7 @@ def update_match_progress(
                 winner_talent_elements,
                 winner_campaign_state,
                 winner_profile_state,
+                winner_spell_state,
             )
 
         if loser_progress:
@@ -375,6 +406,7 @@ def update_match_progress(
                 loser_talent_elements,
                 loser_campaign_state,
                 loser_profile_state,
+                loser_spell_state,
             )
 
         session.commit()
@@ -428,6 +460,7 @@ def update_campaign_progress(
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         ) = read_progress_state(progression)
 
         if won:
@@ -453,6 +486,7 @@ def update_campaign_progress(
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         )
         session.commit()
         session.refresh(progression)
@@ -472,7 +506,7 @@ def get_player_talent_bonuses(email: str | None) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        _, _, talent_ranks, _, talent_elements, _, _ = read_progress_state(progression)
+        _, _, talent_ranks, _, talent_elements, _, _, _ = read_progress_state(progression)
         session.commit()
         return compute_talent_bonuses(talent_ranks, talent_elements)
     except Exception:
@@ -497,16 +531,21 @@ def get_player_account_state(email: str | None) -> dict:
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, normalized_email)
-        stats, _, talent_ranks, _, talent_elements, _, profile_state = read_progress_state(progression)
+        stats, _, talent_ranks, _, talent_elements, campaign_state, profile_state, spell_state = read_progress_state(progression)
         level = level_from_experience(int(stats.get("experience_total", 0)))
+        level_rewards = unlocked_level_reward_ids(level)
+        unlocked_spell_ids = compute_unlocked_spell_ids(level_rewards, talent_ranks, campaign_state)
+        normalized_spell_state = normalize_spell_state(spell_state, unlocked_spell_ids)
         session.commit()
         return {
             "talent_bonuses": compute_talent_bonuses(talent_ranks, talent_elements),
             "level": level,
-            "level_rewards": unlocked_level_reward_ids(level),
-            "level_reward_bonuses": compute_level_reward_bonuses(unlocked_level_reward_ids(level)),
+            "level_rewards": level_rewards,
+            "level_reward_bonuses": compute_level_reward_bonuses(level_rewards),
             "selected_icon": profile_state["selected_icon"],
             "selected_border": profile_state["selected_border"],
+            "equipped_spell_ids": normalized_spell_state["equipped_spell_ids"],
+            "unlocked_spell_ids": unlocked_spell_ids,
         }
     except Exception:
         session.rollback()
@@ -517,9 +556,22 @@ def get_player_account_state(email: str | None) -> dict:
             "level_reward_bonuses": {},
             "selected_icon": None,
             "selected_border": "default",
+            "equipped_spell_ids": default_spell_state()["equipped_spell_ids"],
+            "unlocked_spell_ids": list(default_spell_state()["equipped_spell_ids"]),
         }
     finally:
         session.close()
+
+
+def build_spells_by_player_payload(game: Game) -> dict[str, list[dict]]:
+    return {
+        player_id: player.get_match_spells_payload()
+        for player_id, player in game.players.items()
+    }
+
+
+def opponent_below_final_push_threshold(opponent) -> bool:
+    return opponent.health <= max(1, int(round(opponent.max_health * 0.3)))
 
 
 async def finalize_match(
@@ -660,6 +712,7 @@ def set_profile_icon(email: str, icon: str):
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         ) = read_progress_state(progression)
         if icon:
             profile_state["selected_icon"] = icon.strip()
@@ -674,6 +727,7 @@ def set_profile_icon(email: str, icon: str):
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         )
         session.commit()
         session.refresh(progression)
@@ -699,6 +753,7 @@ def set_profile_border(email: str, border: str):
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         ) = read_progress_state(progression)
         normalized_border = (border or "default").strip() or "default"
         if normalized_border not in profile_state["unlocked_borders"]:
@@ -713,6 +768,69 @@ def set_profile_border(email: str, border: str):
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
+        )
+        session.commit()
+        session.refresh(progression)
+        return build_progress_snapshot(progression)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+@app.post("/profile/{email}/spells/equip")
+def set_equipped_spells(email: str, spell_ids: list[str] = Body(...)):
+    decoded_email = decode_email(email)
+    session = SessionLocal()
+    try:
+        progression = get_or_create_progress(session, decoded_email)
+        (
+            stats,
+            achievements,
+            talent_ranks,
+            specialization,
+            talent_elements,
+            campaign_state,
+            profile_state,
+            spell_state,
+        ) = read_progress_state(progression)
+        level = level_from_experience(int(stats.get("experience_total", 0)))
+        unlocked_spell_ids = compute_unlocked_spell_ids(
+            unlocked_level_reward_ids(level),
+            talent_ranks,
+            campaign_state,
+        )
+        requested_ids = []
+        seen: set[str] = set()
+        for spell_id in spell_ids or []:
+            if spell_id in seen:
+                continue
+            definition = get_spell_definition(spell_id)
+            if not definition:
+                return {"error": f"Unknown spell: {spell_id}"}
+            if spell_id not in unlocked_spell_ids:
+                return {"error": f"Spell not unlocked: {spell_id}"}
+            requested_ids.append(spell_id)
+            seen.add(spell_id)
+        if len(requested_ids) > MAX_EQUIPPED_SPELLS:
+            return {"error": f"Equip at most {MAX_EQUIPPED_SPELLS} spells"}
+
+        spell_state = normalize_spell_state(
+            {"equipped_spell_ids": requested_ids},
+            unlocked_spell_ids,
+        )
+        save_progress_state(
+            progression,
+            stats,
+            achievements,
+            talent_ranks,
+            specialization,
+            talent_elements,
+            campaign_state,
+            profile_state,
+            spell_state,
         )
         session.commit()
         session.refresh(progression)
@@ -730,7 +848,7 @@ def unlock_talent(email: str, talent_id: str, element: str | None = None):
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, decoded_email)
-        stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state = read_progress_state(
+        stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state, spell_state = read_progress_state(
             progression
         )
         can_unlock, error = can_unlock_talent(talent_id, achievements, talent_ranks, specialization)
@@ -746,7 +864,7 @@ def unlock_talent(email: str, talent_id: str, element: str | None = None):
         talent_ranks[talent_id] = int(talent_ranks.get(talent_id, 0)) + 1
         achievements = evaluate_achievements(stats, achievements)
         save_progress_state(
-            progression, stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state
+            progression, stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state, spell_state
         )
         session.commit()
         session.refresh(progression)
@@ -768,7 +886,7 @@ def set_talent_element(email: str, talent_id: str, element: str):
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, decoded_email)
-        stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state = read_progress_state(
+        stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state, spell_state = read_progress_state(
             progression
         )
         talent_definition = get_talent_definition(talent_id)
@@ -777,7 +895,7 @@ def set_talent_element(email: str, talent_id: str, element: str):
 
         talent_elements[talent_id] = normalized_element
         save_progress_state(
-            progression, stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state
+            progression, stats, achievements, talent_ranks, specialization, talent_elements, campaign_state, profile_state, spell_state
         )
         session.commit()
         session.refresh(progression)
@@ -795,8 +913,8 @@ def reset_talents(email: str):
     session = SessionLocal()
     try:
         progression = get_or_create_progress(session, decoded_email)
-        stats, achievements, _, _, _, campaign_state, profile_state = read_progress_state(progression)
-        save_progress_state(progression, stats, achievements, {}, None, {}, campaign_state, profile_state)
+        stats, achievements, _, _, _, campaign_state, profile_state, spell_state = read_progress_state(progression)
+        save_progress_state(progression, stats, achievements, {}, None, {}, campaign_state, profile_state, spell_state)
         session.commit()
         session.refresh(progression)
         return build_progress_snapshot(progression)
@@ -821,6 +939,7 @@ def complete_tutorial(email: str):
             talent_elements,
             campaign_state,
             profile_state,
+            spell_state,
         ) = read_progress_state(progression)
 
         if int(stats.get("tutorial_completions", 0)) < 1:
@@ -844,6 +963,7 @@ def complete_tutorial(email: str):
                 talent_elements,
                 campaign_state,
                 profile_state,
+                spell_state,
             )
             session.commit()
             session.refresh(progression)
@@ -1173,16 +1293,38 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
     opponent_id = [pid for pid in game.players if pid != player_id][0]
     opponent = game.players[opponent_id]
 
+    prepared_spell_id = player.prepared_spell_id
+    prepared_spell = get_spell_definition(prepared_spell_id) if prepared_spell_id else None
+    if prepared_spell_id == "heavy_blow" and len(selected_cards) != 1:
+        return {"error": "Heavy Blow requires playing exactly 1 card"}
+    if prepared_spell_id == "final_push" and not opponent_below_final_push_threshold(opponent):
+        return {"error": "Final Push can only be used while the opponent is below 30% health"}
+
     damage_details = game.calculate_damage_details(selected_cards, player_id)
     damage = damage_details["damage"]
     hand_type = damage_details["hand_type"]
     multiplier = damage_details["multiplier"]
+    if prepared_spell_id == "perfect_pairing" and multiplier < 3:
+        damage = int(round(damage * (3 / max(1, multiplier))))
+        hand_type = "two pair"
+        multiplier = 3
+    elif prepared_spell_id == "kindle":
+        damage = int(round(damage * 1.2))
+    elif prepared_spell_id == "overcharge":
+        damage = int(round(damage * 1.35))
+    elif prepared_spell_id == "final_push":
+        damage = int(round(damage * 1.5))
+    elif prepared_spell_id == "heavy_blow":
+        damage = int(round(damage * 8.0))
+
     mitigation = opponent.get_incoming_damage_breakdown(
         damage,
         damage_details["resolved_cards"],
         hand_type,
     )
     actual_damage = mitigation["final_damage"]
+    if opponent.next_incoming_spell_reduction_pct > 0:
+        opponent.next_incoming_spell_reduction_pct = 0
     hits = 1
     damage_instances = [actual_damage]
     if player.play_twice_chance_pct > 0 and random.random() < (player.play_twice_chance_pct / 100.0):
@@ -1202,6 +1344,19 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
     if hand_type == "full house" and player.full_house_armor_gain > 0:
         player.armor += player.full_house_armor_gain
 
+    spell_effect_id = None
+    spell_effect_name = None
+    spell_gold_bonus = 0
+    if prepared_spell:
+        spell_effect_id = prepared_spell["id"]
+        spell_effect_name = prepared_spell["name"]
+        player.consume_prepared_spell()
+        if spell_effect_id == "overcharge":
+            player.health = max(1, player.health - 5)
+        elif spell_effect_id == "double_stake":
+            player.health = max(1, player.health - 6)
+            spell_gold_bonus = 4
+
     winner = None
     match_finished = False
     round_finished = False
@@ -1217,7 +1372,8 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
     if not winner:
         game.turn_index = (game.turn_index + 1) % len(game.players)
         game.start_battle_phase()
-    player.gold += multiplier + player.gold_gain_flat
+    gold_gained = multiplier + player.gold_gain_flat + spell_gold_bonus
+    player.gold += gold_gained
 
     await game.broadcast({
         "type": "hand_played",
@@ -1228,6 +1384,7 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "armor_mitigation_pct": mitigation["armor_reduction_pct"],
         "rank_resistance_mitigation_pct": mitigation["rank_resistance_reduction_pct"],
         "hand_type_mitigation_pct": mitigation["hand_type_resistance_reduction_pct"],
+        "spell_mitigation_pct": mitigation.get("spell_reduction_pct", 0),
         "damage_instances": damage_instances,
         "hits": hits,
         "double_play_triggered": hits > 1,
@@ -1246,7 +1403,10 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "round_finished": round_finished,
         "match_finished": match_finished,
         "remaining_discards": player.remaining_discards,
-        "gold": multiplier + player.gold_gain_flat
+        "gold": gold_gained,
+        "spell_effect_id": spell_effect_id,
+        "spell_effect_name": spell_effect_name,
+        "spells_by_player": build_spells_by_player_payload(game),
     })
     if not winner:
         await game.broadcast_match_state()
@@ -1280,6 +1440,8 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "winner": winner,
         "round_finished": round_finished,
         "match_finished": match_finished,
+        "gold": gold_gained,
+        "spell_effect_id": spell_effect_id,
     }
 
 
@@ -1555,6 +1717,7 @@ async def start_bot_game(
         avatar_border=account_state.get("selected_border"),
         level_unlocks=account_state["level_rewards"],
         level_reward_bonuses=account_state["level_reward_bonuses"],
+        equipped_spell_ids=account_state.get("equipped_spell_ids", []),
     )
     game.add_player(bot_name, avatar=bot_avatar)
     game.start_battle_phase()
@@ -1589,6 +1752,7 @@ async def start_campaign_node(email: str, node_id: str):
             _talent_elements,
             campaign_state,
             _profile_state,
+            _spell_state,
         ) = read_progress_state(progression)
         if not is_campaign_node_unlocked(campaign_state, node_id):
             return {"error": "Campaign node is locked"}
@@ -1622,6 +1786,7 @@ async def start_campaign_node(email: str, node_id: str):
         avatar_border=account_state.get("selected_border"),
         level_unlocks=account_state["level_rewards"],
         level_reward_bonuses=account_state["level_reward_bonuses"],
+        equipped_spell_ids=account_state.get("equipped_spell_ids", []),
     )
     game.add_player(
         bot_name,
@@ -1676,6 +1841,7 @@ def get_players(game_id: str):
             player_id: [relic.to_dict() for relic in player.relics]
             for player_id, player in game.players.items()
         },
+        "spells_by_player": build_spells_by_player_payload(game),
     }
 
 
@@ -1744,6 +1910,7 @@ async def join_game(
             avatar_border=account_state.get("selected_border"),
             level_unlocks=account_state["level_rewards"],
             level_reward_bonuses=account_state["level_reward_bonuses"],
+            equipped_spell_ids=account_state.get("equipped_spell_ids", []),
         )
     except ValueError as error:
         return {"error": str(error)}
@@ -1974,6 +2141,84 @@ async def play_hand(game_id: str, request: dict):
 
     return await execute_play_hand_action(game_id, player_id, selected_cards)
 
+
+@app.post("/game/{game_id}/spell/use")
+async def use_spell(game_id: str, request: dict):
+    if game_id not in games:
+        return {"error": "Game not found"}
+
+    game = games[game_id]
+    if len(game.players) < 2:
+        return {"error": "Waiting for another player"}
+
+    player_id = request.get("player_id")
+    spell_id = request.get("spell_id", "")
+    game.record_activity(player_id)
+    resolution = await resolve_game_state(game_id)
+    if resolution:
+        return {"error": resolution["reason"]}
+    if game.phase != "battle":
+        return {"error": "Round is not active"}
+    if player_id not in game.players:
+        return {"error": "Player not found"}
+    if player_id != list(game.players.keys())[game.turn_index]:
+        return {"error": "Not your turn"}
+
+    player = game.players[player_id]
+    opponent_id = [pid for pid in game.players if pid != player_id][0]
+    opponent = game.players[opponent_id]
+    spell = get_spell_definition(spell_id)
+    if not spell:
+        return {"error": "Spell not found"}
+
+    can_use, error = player.can_prepare_spell(spell_id)
+    if not can_use:
+        return {"error": error or "Unable to use spell"}
+
+    effect_now = spell["effect_type"] == "instant"
+    if spell_id == "final_push" and not opponent_below_final_push_threshold(opponent):
+        return {"error": "Final Push can only be used while the opponent is below 30% health"}
+
+    if effect_now:
+        player.spend_spell(spell_id)
+        if spell_id == "guard_pulse":
+            player.armor += 12
+        elif spell_id == "second_breath":
+            player.health = min(player.max_health, player.health + 10)
+        elif spell_id == "blood_price":
+            player.health = max(1, player.health - 8)
+            player.remaining_discards += 1
+        elif spell_id == "stone_delay":
+            player.next_incoming_spell_reduction_pct = max(
+                player.next_incoming_spell_reduction_pct,
+                25,
+            )
+    else:
+        player.prepare_spell(spell_id)
+
+    if should_track_progress(game) and player.account_email:
+        update_player_progress(player.account_email, summarize_player_peaks(player))
+
+    payload = {
+        "type": "spell_used",
+        "player": player_id,
+        "spell_id": spell["id"],
+        "spell_name": spell["name"],
+        "animation": spell["animation"],
+        "effect_now": effect_now,
+        "health_update": {p.name: p.health for p in game.players.values()},
+        "max_health_update": {p.name: p.max_health for p in game.players.values()},
+        "armor_update": {p.name: p.armor for p in game.players.values()},
+        "gold_update": {p.name: p.gold for p in game.players.values()},
+        "remaining_discards_update": {
+            p.name: p.remaining_discards for p in game.players.values()
+        },
+        "spells_by_player": build_spells_by_player_payload(game),
+    }
+    await game.broadcast(payload)
+    await game.broadcast_match_state()
+    return {"message": f"{player_id} used {spell['name']}", **payload}
+
     # Calculate damage
     damage_details = game.calculate_damage_details(selected_cards, player_id)
     damage = damage_details["damage"]
@@ -2088,6 +2333,7 @@ async def end_turn(game_id: str, player_id: str):
         if player_id != player_keys[game.turn_index]:
             return {"error": "Not your turn"}
 
+        game.players[player_id].clear_prepared_spell()
         # Move to the next player
         game.turn_index = (game.turn_index + 1) % len(player_keys)
         next_player = player_keys[game.turn_index]
