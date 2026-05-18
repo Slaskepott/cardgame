@@ -1260,7 +1260,9 @@ async def execute_discard_action(game_id: str, player_id: str, selected_cards: l
         "type": "hand_updated",
         "player": player_id,
         "cards": result["new_hand"],
-        "remaining_discards": player.remaining_discards
+        "remaining_discards": player.remaining_discards,
+        "draw_pile_remaining": game.get_player_draw_pile_remaining(player_id),
+        "draw_pile": game.get_player_draw_pile(player_id),
     }
     await game.broadcast(hand_message)
 
@@ -1284,6 +1286,8 @@ async def execute_discard_action(game_id: str, player_id: str, selected_cards: l
         "new_hand": result["new_hand"],
         "remaining_discards": player.remaining_discards,
         "gold": player.gold,
+        "draw_pile_remaining": game.get_player_draw_pile_remaining(player_id),
+        "draw_pile": game.get_player_draw_pile(player_id),
     }
 
 
@@ -1398,6 +1402,8 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "next_player": list(game.players.keys())[game.turn_index],
         "hand_type": hand_type,
         "new_hand": result["new_hand"],
+        "draw_pile_remaining": game.get_player_draw_pile_remaining(player_id),
+        "draw_pile": game.get_player_draw_pile(player_id),
         "multiplier": multiplier,
         "winner": winner,
         "round_finished": round_finished,
@@ -1437,6 +1443,8 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "damage": total_damage,
         "multiplier": multiplier,
         "new_hand": result["new_hand"],
+        "draw_pile_remaining": game.get_player_draw_pile_remaining(player_id),
+        "draw_pile": game.get_player_draw_pile(player_id),
         "winner": winner,
         "round_finished": round_finished,
         "match_finished": match_finished,
@@ -2020,6 +2028,8 @@ async def game_websocket(websocket: WebSocket, game_id: str, player_id: str):
         "cards": [{"rank": c.rank, "suit": c.suit} for c in player.hand],
         "next_player": game.get_current_player_id(),
         "remaining_discards": player.remaining_discards,
+        "draw_pile_remaining": game.get_player_draw_pile_remaining(player_id),
+        "draw_pile": game.get_player_draw_pile(player_id),
     }
     await websocket.send_json(hand_message)
     await websocket.send_json(game.serialize_match_state())

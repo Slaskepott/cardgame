@@ -658,6 +658,14 @@ class Game:
     def serialize_cards(self, cards: list[Card]) -> list[dict]:
         return [{"rank": card.rank, "suit": card.suit} for card in cards]
 
+    def get_player_draw_pile(self, player_id: str) -> list[dict]:
+        player = self.players[player_id]
+        return self.serialize_cards(self.deck + player.special_deck)
+
+    def get_player_draw_pile_remaining(self, player_id: str) -> int:
+        player = self.players[player_id]
+        return len(self.deck) + len(player.special_deck)
+
     def resolve_card_variants(self, player: Player, card: dict) -> list[dict]:
         rank = card["rank"]
         suit = card["suit"]
