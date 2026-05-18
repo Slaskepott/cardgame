@@ -521,17 +521,46 @@ class Player:
         rank_resistance_multiplier = self.get_rank_resistance_multiplier(cards)
         hand_type_resistance_multiplier = self.get_hand_type_resistance_multiplier(hand_type)
         spell_delay_multiplier = max(0.0, 1.0 - (self.next_incoming_spell_reduction_pct / 100.0))
-        final_multiplier = max(
-            0.0,
-            self.damage_taken_multiplier
-            * (1.0 - armor_reduction)
-            * rank_resistance_multiplier
-            * hand_type_resistance_multiplier,
-        ) * spell_delay_multiplier
-        mitigated_damage = max(0, int(round(damage * final_multiplier)))
+        raw_damage = int(damage)
+        damage_after_taken_modifier = max(
+            0,
+            int(round(raw_damage * self.damage_taken_multiplier)),
+        )
+        damage_after_armor = max(
+            0,
+            int(round(damage_after_taken_modifier * (1.0 - armor_reduction))),
+        )
+        damage_after_rank_resistance = max(
+            0,
+            int(round(damage_after_armor * rank_resistance_multiplier)),
+        )
+        damage_after_hand_resistance = max(
+            0,
+            int(round(damage_after_rank_resistance * hand_type_resistance_multiplier)),
+        )
+        mitigated_damage = max(
+            0,
+            int(round(damage_after_hand_resistance * spell_delay_multiplier)),
+        )
+        armor_reduced = max(0, damage_after_taken_modifier - damage_after_armor)
+        rank_resistance_reduced = max(0, damage_after_armor - damage_after_rank_resistance)
+        hand_type_resistance_reduced = max(
+            0,
+            damage_after_rank_resistance - damage_after_hand_resistance,
+        )
+        spell_reduced = max(0, damage_after_hand_resistance - mitigated_damage)
+        final_multiplier = mitigated_damage / raw_damage if raw_damage > 0 else 0.0
         return {
-            "raw_damage": int(damage),
+            "raw_damage": raw_damage,
             "final_damage": mitigated_damage,
+            "damage_after_taken_modifier": damage_after_taken_modifier,
+            "damage_after_armor": damage_after_armor,
+            "damage_after_rank_resistance": damage_after_rank_resistance,
+            "damage_after_hand_resistance": damage_after_hand_resistance,
+            "armor_reduced": armor_reduced,
+            "rank_resistance_reduced": rank_resistance_reduced,
+            "hand_type_resistance_reduced": hand_type_resistance_reduced,
+            "spell_reduced": spell_reduced,
             "armor_reduction_pct": int(round(armor_reduction * 100)),
             "rank_resistance_reduction_pct": int(round((1.0 - rank_resistance_multiplier) * 100)),
             "hand_type_resistance_reduction_pct": int(

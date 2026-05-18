@@ -1308,18 +1308,31 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
     damage = damage_details["damage"]
     hand_type = damage_details["hand_type"]
     multiplier = damage_details["multiplier"]
+    offensive_breakdown = {
+        "base_damage": damage_details.get("base_damage", 0),
+        "card_breakdown": damage_details.get("card_breakdown", []),
+        "summary_modifiers": list(damage_details.get("summary_modifiers", [])),
+        "special_rules": list(damage_details.get("special_rules", [])),
+        "hand_type_multiplier": damage_details.get("hand_type_multiplier", 1.0),
+    }
     if prepared_spell_id == "perfect_pairing" and multiplier < 3:
         damage = int(round(damage * (3 / max(1, multiplier))))
         hand_type = "two pair"
         multiplier = 3
+        offensive_breakdown["special_rules"].append("Perfect Pairing")
     elif prepared_spell_id == "kindle":
         damage = int(round(damage * 1.2))
+        offensive_breakdown["summary_modifiers"].append("Kindle +20%")
     elif prepared_spell_id == "overcharge":
         damage = int(round(damage * 1.35))
+        offensive_breakdown["summary_modifiers"].append("Overcharge +35%")
     elif prepared_spell_id == "final_push":
         damage = int(round(damage * 1.5))
+        offensive_breakdown["summary_modifiers"].append("Final Push +50%")
     elif prepared_spell_id == "heavy_blow":
         damage = int(round(damage * 8.0))
+        offensive_breakdown["special_rules"].append("Heavy Blow x8")
+    offensive_breakdown["pre_mitigation_damage"] = damage
 
     mitigation = opponent.get_incoming_damage_breakdown(
         damage,
@@ -1385,6 +1398,8 @@ async def execute_play_hand_action(game_id: str, player_id: str, selected_cards:
         "cards": selected_cards,
         "damage": total_damage,
         "raw_damage": damage * hits,
+        "damage_breakdown": offensive_breakdown,
+        "mitigation_breakdown": mitigation,
         "armor_mitigation_pct": mitigation["armor_reduction_pct"],
         "rank_resistance_mitigation_pct": mitigation["rank_resistance_reduction_pct"],
         "hand_type_mitigation_pct": mitigation["hand_type_resistance_reduction_pct"],

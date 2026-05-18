@@ -143,6 +143,35 @@ def test_high_card_resistance_explains_damage_below_armor_only_case():
     assert mitigation["final_damage"] == 20
 
 
+def test_incoming_damage_breakdown_tracks_stepwise_reductions():
+    player = Player(
+        "tester",
+        talent_bonuses={
+            "high_card_resistance_pct": 20,
+            "straight_resistance_pct": 25,
+        },
+    )
+    player.armor = 14
+    cards = [
+        {"rank": "10", "suit": "Fire"},
+        {"rank": "J", "suit": "Water"},
+        {"rank": "Q", "suit": "Earth"},
+        {"rank": "K", "suit": "Air"},
+        {"rank": "A", "suit": "Fire"},
+    ]
+
+    mitigation = player.get_incoming_damage_breakdown(40, cards, "straight")
+
+    assert mitigation["raw_damage"] == 40
+    assert mitigation["damage_after_armor"] == 37
+    assert mitigation["damage_after_rank_resistance"] == 30
+    assert mitigation["damage_after_hand_resistance"] == 22
+    assert mitigation["armor_reduced"] == 3
+    assert mitigation["rank_resistance_reduced"] == 7
+    assert mitigation["hand_type_resistance_reduced"] == 8
+    assert mitigation["final_damage"] == 22
+
+
 def test_calculate_damage_applies_damage_and_elemental_modifiers():
     game = Game()
     player = Player("tester")
@@ -166,6 +195,36 @@ def test_calculate_damage_applies_damage_and_elemental_modifiers():
     assert hand_type == "royal flush"
     assert multiplier == 10
     assert damage == 150
+
+
+def test_calculate_damage_details_includes_offensive_breakdown_summary():
+    game = Game()
+    player = Player(
+        "tester",
+        talent_bonuses={
+            "pair_damage_pct": 25,
+            "low_card_damage_pct": 50,
+        },
+    )
+    player.upgrades = [make_upgrade("Increase Fire Damage", "+30% Fire Damage")]
+    player.apply_upgrades()
+    game.players[player.name] = player
+
+    selected_cards = [
+        {"rank": "2", "suit": "Fire"},
+        {"rank": "2", "suit": "Water"},
+        {"rank": "5", "suit": "Earth"},
+        {"rank": "7", "suit": "Air"},
+        {"rank": "9", "suit": "Fire"},
+    ]
+
+    details = game.calculate_damage_details(selected_cards, player.name)
+
+    assert details["hand_type"] == "pair"
+    assert details["base_damage"] > 0
+    assert "Pair damage" in details["summary_modifiers"]
+    assert "Low-card bonus" in details["card_breakdown"][0]["modifiers"]
+    assert any(entry["suit"] == "Fire" for entry in details["card_breakdown"])
 
 
 def test_calculate_damage_applies_low_card_and_pair_modifiers():

@@ -685,11 +685,11 @@ class Game:
 
         return [card]
 
-    def evaluate_concrete_hand(self, cards: list[dict], player: Player) -> tuple[int, str, int]:
+    def evaluate_concrete_hand(self, cards: list[dict], player: Player) -> dict:
         rank_counts = {}
         suit_counts = {}
         ranks = []
-        base_values = []
+        card_breakdown = []
         modifier_dict = {
             "Water": player.water_damage_modifier,
             "Fire": player.fire_damage_modifier,
@@ -709,12 +709,19 @@ class Game:
             rank = RANK_VALUES[card["rank"]]
             suit = card["suit"]
             rank_modifier = 1.0
+            modifier_labels = []
             if rank <= 7:
                 rank_modifier *= player.low_card_damage_modifier
+                if player.low_card_damage_modifier > 1.0:
+                    modifier_labels.append("Low-card bonus")
             elif rank >= 10:
                 rank_modifier *= player.high_card_damage_modifier
+                if player.high_card_damage_modifier > 1.0:
+                    modifier_labels.append("High-card bonus")
             if rank in {2, 3, 4}:
                 rank_modifier *= player.tiny_rank_damage_multiplier
+                if player.tiny_rank_damage_multiplier > 1.0:
+                    modifier_labels.append("Tiny Tyrants")
 
             total_modifier = modifier_dict.get(suit, 1.0) * player.damage_modifier * rank_modifier
             repeat_count = max(0, suit_counts.get(suit, 0) - 1)
@@ -722,9 +729,21 @@ class Game:
                 total_modifier *= 1.0 + (
                     repeat_count * player.repeated_suit_damage_bonus_pct / 100.0
                 )
+                modifier_labels.append(f"Tidal Memory x{repeat_count}")
             compressed_rank = self.get_compressed_rank_value(rank)
             damage_rank = compressed_rank + (player.plasma_bonus_value if suit == "Plasma" else 0)
-            base_values.append(damage_rank * total_modifier)
+            card_value = damage_rank * total_modifier
+            card_breakdown.append(
+                {
+                    "rank": card["rank"],
+                    "suit": suit,
+                    "compressed_rank": compressed_rank,
+                    "damage_rank": damage_rank,
+                    "modifier_multiplier": round(total_modifier, 3),
+                    "value": round(card_value, 2),
+                    "modifiers": modifier_labels,
+                }
+            )
 
         rank_frequencies = sorted(rank_counts.values(), reverse=True)
         flush_requirement = 4 if player.soft_flush_enabled else 5
@@ -760,18 +779,59 @@ class Game:
 
         multiplier = HAND_MULTIPLIERS[hand_type]
         hand_type_modifier = 1.0
+        summary_modifiers = []
         if hand_type in {"pair", "two pair"}:
             hand_type_modifier *= player.pair_damage_modifier
+            if player.pair_damage_modifier > 1.0:
+                summary_modifiers.append("Pair damage")
         if hand_type in {"straight", "straight flush", "royal flush"}:
             hand_type_modifier *= player.straight_damage_modifier
+            if player.straight_damage_modifier > 1.0:
+                summary_modifiers.append("Straight damage")
         if hand_type in {"flush", "flush house", "straight flush", "royal flush"}:
             hand_type_modifier *= player.flush_damage_modifier
+            if player.flush_damage_modifier > 1.0:
+                summary_modifiers.append("Flush damage")
         if hand_type in {"three of a kind", "full house", "flush house"}:
             hand_type_modifier *= player.full_house_damage_modifier
+            if player.full_house_damage_modifier > 1.0:
+                summary_modifiers.append("Set/house damage")
 
-        base_damage = sum(base_values) // max(1, len(base_values))
+        if player.damage_modifier > 1.0:
+            summary_modifiers.append("Overall damage")
+        for suit, modifier in modifier_dict.items():
+            if modifier > 1.0 and any(card["suit"] == suit for card in cards):
+                summary_modifiers.append(f"{suit} damage")
+        if player.plasma_bonus_value > 0 and any(card["suit"] == "Plasma" for card in cards):
+            summary_modifiers.append("Plasma value")
+
+        special_rules = []
+        if player.gap_straight_enabled:
+            special_rules.append("Gap Straight")
+        if player.soft_flush_enabled:
+            special_rules.append("Soft Flush")
+        if player.repeated_suit_damage_bonus_pct > 0 and len({card["suit"] for card in cards}) < len(cards):
+            special_rules.append("Tidal Memory")
+        if player.tiny_rank_damage_multiplier > 1.0 and any(
+            card["rank"] in {"2", "3", "4"} for card in cards
+        ):
+            special_rules.append("Tiny Tyrants")
+
+        base_damage = int(
+            sum(entry["value"] for entry in card_breakdown) // max(1, len(card_breakdown))
+        )
         total_damage = int(round(base_damage * multiplier * hand_type_modifier))
-        return total_damage, hand_type, multiplier
+        return {
+            "damage": total_damage,
+            "hand_type": hand_type,
+            "multiplier": multiplier,
+            "base_damage": base_damage,
+            "hand_type_multiplier": round(hand_type_modifier, 3),
+            "resolved_cards": cards,
+            "card_breakdown": card_breakdown,
+            "summary_modifiers": summary_modifiers,
+            "special_rules": special_rules,
+        }
 
     def calculate_damage(self, cards, player_id):
         details = self.calculate_damage_details(cards, player_id)
@@ -785,16 +845,16 @@ class Game:
 
         for resolved_cards in product(*variants_per_card):
             resolved_list = list(resolved_cards)
-            total_damage, hand_type, multiplier = self.evaluate_concrete_hand(resolved_list, player)
+            evaluation = self.evaluate_concrete_hand(resolved_list, player)
+            total_damage = evaluation["damage"]
+            hand_type = evaluation["hand_type"]
+            multiplier = evaluation["multiplier"]
             rank_total = sum(RANK_VALUES[card["rank"]] for card in resolved_list)
             score = (total_damage, multiplier, rank_total)
             if best_score is None or score > best_score:
                 best_score = score
                 best_result = {
-                    "damage": total_damage,
-                    "hand_type": hand_type,
-                    "multiplier": multiplier,
-                    "resolved_cards": resolved_list,
+                    **evaluation,
                 }
 
         if best_result is None:
@@ -802,7 +862,12 @@ class Game:
                 "damage": 0,
                 "hand_type": "high card",
                 "multiplier": 1,
+                "base_damage": 0,
+                "hand_type_multiplier": 1.0,
                 "resolved_cards": [],
+                "card_breakdown": [],
+                "summary_modifiers": [],
+                "special_rules": [],
             }
 
         return best_result
